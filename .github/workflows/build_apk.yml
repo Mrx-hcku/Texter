@@ -48,6 +48,12 @@ jobs:
           sed -i "s/id \"org.jetbrains.kotlin.android\" version \"[^\"]*\"/id \"org.jetbrains.kotlin.android\" version \"2.1.0\"/" android/settings.gradle || true
           sed -i "s/id(\"org.jetbrains.kotlin.android\") version \"[^\"]*\"/id(\"org.jetbrains.kotlin.android\") version \"2.1.0\"/" android/settings.gradle.kts || true
 
+      - name: Bump Android Gradle Plugin version (Kotlin 2.1.0 needs AGP 7.3.1+)
+        run: |
+          sed -i "s/id \"com.android.application\" version \"[^\"]*\"/id \"com.android.application\" version \"8.3.0\"/" android/settings.gradle || true
+          sed -i "s/id(\"com.android.application\") version \"[^\"]*\"/id(\"com.android.application\") version \"8.3.0\"/" android/settings.gradle.kts || true
+          sed -i "s/distributionUrl=.*/distributionUrl=https\\\\:\\/\\/services.gradle.org\\/distributions\\/gradle-8.4-all.zip/" android/gradle/wrapper/gradle-wrapper.properties || true
+
       - name: Get dependencies
         run: flutter pub get
 
