@@ -90,6 +90,34 @@ class AppwriteService {
     );
   }
 
+  Future<models.Document> findOrCreateDirectChat({
+    required String myId,
+    required String otherId,
+    required String otherName,
+  }) async {
+    final existing = await getChats(myId);
+    for (final doc in existing) {
+      if (doc.data['type'] == 'direct') {
+        final ids = List<String>.from(doc.data['participantIds'] ?? []);
+        if (ids.contains(otherId)) return doc;
+      }
+    }
+    return createChat(type: 'direct', name: otherName, participantIds: [myId, otherId]);
+  }
+
+  // ---------------- USERS ----------------
+  Future<List<models.Document>> searchUsers(String query, {String? excludeId}) async {
+    final queries = <String>[Query.limit(50)];
+    if (query.trim().isNotEmpty) queries.add(Query.search('name', query.trim()));
+    final res = await databases.listDocuments(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.usersCollection,
+      queries: queries,
+    );
+    if (excludeId == null) return res.documents;
+    return res.documents.where((d) => d.$id != excludeId).toList();
+  }
+
   // ---------------- MESSAGES ----------------
   Future<List<models.Document>> getMessages(String chatId) async {
     final res = await databases.listDocuments(
@@ -158,6 +186,26 @@ class AppwriteService {
     return res.documents;
   }
 
+  Future<models.Document> createGroup({
+    required String name,
+    required String description,
+    required List<String> memberIds,
+    required String creatorId,
+  }) {
+    return databases.createDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.groupsCollection,
+      documentId: ID.unique(),
+      data: {
+        'name': name,
+        'description': description,
+        'avatarUrl': '',
+        'memberIds': memberIds,
+        'adminIds': [creatorId],
+      },
+    );
+  }
+
   // ---------------- CHANNELS ----------------
   Future<List<models.Document>> getChannels() async {
     final res = await databases.listDocuments(
@@ -165,6 +213,25 @@ class AppwriteService {
       collectionId: AppwriteConfig.channelsCollection,
     );
     return res.documents;
+  }
+
+  Future<models.Document> createChannel({
+    required String name,
+    required String description,
+    required String creatorId,
+  }) {
+    return databases.createDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.channelsCollection,
+      documentId: ID.unique(),
+      data: {
+        'name': name,
+        'description': description,
+        'avatarUrl': '',
+        'subscriberCount': 1,
+        'subscriberIds': [creatorId],
+      },
+    );
   }
 
   // ---------------- ADS ----------------

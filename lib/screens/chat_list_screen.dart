@@ -3,6 +3,7 @@ import 'package:appwrite/models.dart' as models;
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import 'one_to_one_chat_screen.dart';
+import 'new_chat_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -25,11 +26,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Future<void> _load() async {
     final user = await AppwriteService.instance.getCurrentUser();
     if (user == null) return;
-    final chats = await AppwriteService.instance.getChats(user.$id);
-    setState(() {
-      _chats = chats;
-      _loading = false;
-    });
+    try {
+      final chats = await AppwriteService.instance.getChats(user.$id);
+      setState(() {
+        _chats = chats;
+        _loading = false;
+      });
+    } catch (_) {
+      setState(() => _loading = false);
+    }
   }
 
   @override
@@ -42,7 +47,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Chats'),
-        actions: [IconButton(icon: const Icon(Icons.edit_square), onPressed: () {})],
+        actions: [IconButton(icon: const Icon(Icons.edit_square), onPressed: () async {
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const NewChatScreen()));
+          _load();
+        })],
       ),
       body: RefreshIndicator(
         onRefresh: _load,

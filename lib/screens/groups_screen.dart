@@ -3,6 +3,7 @@ import 'package:appwrite/models.dart' as models;
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import 'group_chat_screen.dart';
+import 'create_group_screen.dart';
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({super.key});
@@ -34,7 +35,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Groups'),
-        actions: [IconButton(icon: const Icon(Icons.add), onPressed: () {})],
+        actions: [IconButton(icon: const Icon(Icons.add), onPressed: () async {
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateGroupScreen()));
+          _load();
+        })],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

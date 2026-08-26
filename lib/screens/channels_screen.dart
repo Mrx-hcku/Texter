@@ -3,6 +3,7 @@ import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import '../models/models.dart';
 import '../widgets/sponsored_ad_card.dart';
+import 'create_channel_screen.dart';
 
 class ChannelsScreen extends StatefulWidget {
   const ChannelsScreen({super.key});
@@ -69,7 +70,13 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Channels')),
+      appBar: AppBar(
+        title: const Text('Channels'),
+        actions: [IconButton(icon: const Icon(Icons.add), onPressed: () async {
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateChannelScreen()));
+          _load();
+        })],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
