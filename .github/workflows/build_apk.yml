@@ -54,6 +54,24 @@ jobs:
           sed -i "s/id(\"com.android.application\") version \"[^\"]*\"/id(\"com.android.application\") version \"8.3.0\"/" android/settings.gradle.kts || true
           sed -i "s/distributionUrl=.*/distributionUrl=https\\\\:\\/\\/services.gradle.org\\/distributions\\/gradle-8.4-all.zip/" android/gradle/wrapper/gradle-wrapper.properties || true
 
+      - name: Force compileSdk 35 on all subprojects (fixes plugins using flutter.compileSdkVersion)
+        run: |
+          cat >> android/build.gradle << 'GRADLE'
+
+subprojects {
+    plugins.withId("com.android.library") {
+        android {
+            compileSdkVersion 35
+        }
+    }
+    plugins.withId("com.android.application") {
+        android {
+            compileSdkVersion 35
+        }
+    }
+}
+GRADLE
+
       - name: Get dependencies
         run: flutter pub get
 
