@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import 'login_screen.dart';
+import 'account_screen.dart';
+import 'notifications_screen.dart';
+import 'privacy_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -78,9 +81,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text('About', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
           ),
-          _tile(Icons.account_circle_outlined, 'Account'),
-          _tile(Icons.notifications_outlined, 'Notifications'),
-          _tile(Icons.lock_outline, 'Privacy'),
+          _tile(Icons.account_circle_outlined, 'Account', onTap: () async {
+            await Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen()));
+            _load();
+          }),
+          _tile(Icons.notifications_outlined, 'Notifications', onTap: () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+          }),
+          _tile(Icons.lock_outline, 'Privacy', onTap: () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyScreen()));
+          }),
           const Divider(),
           _tile(Icons.logout, 'Logout', color: Colors.red, onTap: _logout),
         ],

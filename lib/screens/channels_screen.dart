@@ -24,13 +24,19 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
   }
 
   Future<void> _load() async {
-    final chDocs = await AppwriteService.instance.getChannels();
-    final adDocs = await AppwriteService.instance.getAds(targetType: 'channel');
-    setState(() {
-      _channels = chDocs.map((d) => ChannelModel.fromMap(d.data..addAll({'\$id': d.$id}))).toList();
-      _ads = adDocs.map((d) => AdModel.fromMap(d.data..addAll({'\$id': d.$id}))).toList();
-      _loading = false;
-    });
+    try {
+      final chDocs = await AppwriteService.instance.getChannels();
+      final adDocs = await AppwriteService.instance.getAds(targetType: 'channel');
+      setState(() {
+        _channels = chDocs.map((d) => ChannelModel.fromMap(d.data..addAll({'\$id': d.$id}))).toList();
+        _ads = adDocs.map((d) => AdModel.fromMap(d.data..addAll({'\$id': d.$id}))).toList();
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() => _loading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load channels: $e')));
+    }
   }
 
   @override

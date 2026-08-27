@@ -35,7 +35,7 @@ class UserModel {
 
 class ChatModel {
   final String id;
-  final String type; // "direct" or "group"
+  final String type;
   final String name;
   final String avatarUrl;
   final List<String> participantIds;
@@ -175,7 +175,7 @@ class AdModel {
   final String imageUrl;
   final String actionText;
   final String actionUrl;
-  final String targetType; // "group" or "channel"
+  final String targetType;
 
   AdModel({
     required this.id,
@@ -191,8 +191,8 @@ class AdModel {
         id: map['\$id'] ?? '',
         title: map['title'] ?? '',
         description: map['description'] ?? '',
-        imageUrl: map['imageUrl'] ?? '',
-        actionText: map['actionText'] ?? 'Learn More',
+        imageUrl: map['bannerUrl'] ?? map['imageUrl'] ?? '',
+        actionText: map['buttonText'] ?? map['actionText'] ?? 'Learn More',
         actionUrl: map['actionUrl'] ?? '',
         targetType: map['targetType'] ?? 'group',
       );

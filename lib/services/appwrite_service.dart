@@ -61,6 +61,14 @@ class AppwriteService {
     }
   }
 
+  Future<void> sendVerificationEmail() {
+    return account.createVerification(url: 'texter://verify');
+  }
+
+  Future<void> confirmVerification({required String userId, required String secret}) {
+    return account.updateVerification(userId: userId, secret: secret);
+  }
+
   // ---------------- CHATS ----------------
   Future<List<models.Document>> getChats(String userId) async {
     final res = await databases.listDocuments(
@@ -116,6 +124,31 @@ class AppwriteService {
     );
     if (excludeId == null) return res.documents;
     return res.documents.where((d) => d.$id != excludeId).toList();
+  }
+
+  Future<models.Document?> getUserDoc(String userId) async {
+    try {
+      return await databases.getDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.usersCollection,
+        documentId: userId,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> updateUserProfile({required String userId, String? name, String? status, String? avatarUrl}) {
+    final data = <String, dynamic>{};
+    if (name != null) data['name'] = name;
+    if (status != null) data['status'] = status;
+    if (avatarUrl != null) data['avatarUrl'] = avatarUrl;
+    return databases.updateDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.usersCollection,
+      documentId: userId,
+      data: data,
+    );
   }
 
   // ---------------- MESSAGES ----------------

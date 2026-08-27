@@ -35,6 +35,7 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
       _messages = docs.map((d) => MessageModel.fromMap(d.data..addAll({'\$id': d.$id, '\$createdAt': d.$createdAt}))).toList();
     });
     _sub = AppwriteService.instance.subscribeToMessages(widget.chatId, (doc) {
+      if (_messages.any((m) => m.id == doc.$id)) return;
       setState(() {
         _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
       });
@@ -51,7 +52,15 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
     final text = _controller.text.trim();
     if (text.isEmpty || _myId == null) return;
     _controller.clear();
-    await AppwriteService.instance.sendMessage(chatId: widget.chatId, senderId: _myId!, text: text);
+    try {
+      final doc = await AppwriteService.instance.sendMessage(chatId: widget.chatId, senderId: _myId!, text: text);
+      setState(() {
+        _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send: $e')));
+    }
   }
 
   Future<void> _attachImage() async {

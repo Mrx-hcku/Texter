@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import 'main_nav_screen.dart';
+import 'verify_email_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,27 +21,38 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
 
   Future<void> _submit() async {
+    final email = _emailCtrl.text.trim().toLowerCase();
+    if (!email.endsWith('@gmail.com')) {
+      setState(() => _error = 'Only Gmail addresses are allowed (e.g. name@gmail.com)');
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       if (_isSignUp) {
-        await AppwriteService.instance.signUp(
-          _emailCtrl.text.trim(),
-          _passCtrl.text.trim(),
-          _nameCtrl.text.trim(),
+        await AppwriteService.instance.signUp(email, _passCtrl.text.trim(), _nameCtrl.text.trim());
+        await AppwriteService.instance.sendVerificationEmail();
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const VerifyEmailScreen()),
+        );
+        return;
+      } else {
+        await AppwriteService.instance.login(email, _passCtrl.text.trim());
+      }
+      final user = await AppwriteService.instance.getCurrentUser();
+      if (!mounted) return;
+      if (user != null && !user.emailVerification) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const VerifyEmailScreen()),
         );
       } else {
-        await AppwriteService.instance.login(
-          _emailCtrl.text.trim(),
-          _passCtrl.text.trim(),
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const MainNavScreen()),
         );
       }
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const MainNavScreen()),
-      );
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -82,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _emailCtrl,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
+                decoration: const InputDecoration(labelText: 'Gmail Address'),
               ),
               const SizedBox(height: 16),
               TextField(

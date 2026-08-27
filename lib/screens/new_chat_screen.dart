@@ -37,19 +37,24 @@ class _NewChatScreenState extends State<NewChatScreen> {
   Future<void> _startChat(models.Document user) async {
     if (_myId == null || _starting) return;
     setState(() => _starting = true);
-    final chat = await AppwriteService.instance.findOrCreateDirectChat(
-      myId: _myId!,
-      otherId: user.$id,
-      otherName: user.data['name'] ?? '',
-    );
-    setState(() => _starting = false);
-    if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OneToOneChatScreen(chatId: chat.$id, chatName: user.data['name'] ?? ''),
-      ),
-    );
+    try {
+      final chat = await AppwriteService.instance.findOrCreateDirectChat(
+        myId: _myId!,
+        otherId: user.$id,
+        otherName: user.data['name'] ?? '',
+      );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => OneToOneChatScreen(chatId: chat.$id, chatName: user.data['name'] ?? ''),
+        ),
+      );
+    } catch (e) {
+      setState(() => _starting = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not start chat: $e')));
+    }
   }
 
   @override
