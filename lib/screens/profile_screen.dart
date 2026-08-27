@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import 'login_screen.dart';
@@ -16,6 +17,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   String _name = '';
   String _email = '';
+  String _avatarUrl = '';
 
   @override
   void initState() {
@@ -30,6 +32,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _name = user.name;
         _email = user.email;
       });
+      try {
+        final doc = await AppwriteService.instance.getUserDoc(user.$id);
+        if (mounted) setState(() => _avatarUrl = doc?.data['avatarUrl'] ?? '');
+      } catch (_) {}
     }
   }
 
@@ -65,10 +71,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 CircleAvatar(
                   radius: 42,
                   backgroundColor: Colors.white,
-                  child: Text(
-                    _name.isNotEmpty ? _name[0].toUpperCase() : '?',
-                    style: TextStyle(fontSize: 32, color: AppTheme.primary, fontWeight: FontWeight.bold),
-                  ),
+                  backgroundImage: _avatarUrl.isNotEmpty ? CachedNetworkImageProvider(_avatarUrl) : null,
+                  child: _avatarUrl.isEmpty
+                      ? Text(
+                          _name.isNotEmpty ? _name[0].toUpperCase() : '?',
+                          style: TextStyle(fontSize: 32, color: AppTheme.primary, fontWeight: FontWeight.bold),
+                        )
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 Text(_name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
