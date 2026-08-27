@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
@@ -11,15 +12,32 @@ class VerifyEmailScreen extends StatefulWidget {
   State<VerifyEmailScreen> createState() => _VerifyEmailScreenState();
 }
 
-class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
-  bool _checking = false;
+class _VerifyEmailScreenState extends State<VerifyEmailScreen> with WidgetsBindingObserver {
   bool _resending = false;
   String _email = '';
+  Timer? _pollTimer;
+  bool _navigated = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadEmail();
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _checkVerified());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkVerified();
+    }
   }
 
   Future<void> _loadEmail() async {
@@ -42,19 +60,16 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   }
 
   Future<void> _checkVerified() async {
-    setState(() => _checking = true);
+    if (_navigated) return;
     final user = await AppwriteService.instance.getCurrentUser();
-    setState(() => _checking = false);
-    if (!mounted) return;
+    if (!mounted || _navigated) return;
     if (user != null && user.emailVerification) {
+      _navigated = true;
+      _pollTimer?.cancel();
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const MainNavScreen()),
         (route) => false,
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Not verified yet. Check your Gmail inbox and tap the link.')),
       );
     }
   }
@@ -73,17 +88,13 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
               const Text('Verify your Gmail', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               Text(
-                "We sent a verification link to $_email. Open Gmail, tap the link, then come back here.",
+                "We sent a verification link to $_email. Open Gmail, tap the link — this screen will continue automatically once verified.",
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.black54),
               ),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: _checking ? null : _checkVerified,
-                child: _checking
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text("I've verified, continue"),
-              ),
+              const SizedBox(height: 24),
+              const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+              const SizedBox(height: 24),
               TextButton(
                 onPressed: _resending ? null : _resend,
                 child: Text(_resending ? 'Sending...' : 'Resend email'),
