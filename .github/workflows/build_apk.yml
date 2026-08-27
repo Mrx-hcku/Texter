@@ -56,21 +56,7 @@ jobs:
 
       - name: Force compileSdk 35 on all subprojects (fixes plugins using flutter.compileSdkVersion)
         run: |
-          cat >> android/build.gradle << 'GRADLE'
-
-subprojects {
-    plugins.withId("com.android.library") {
-        android {
-            compileSdkVersion 35
-        }
-    }
-    plugins.withId("com.android.application") {
-        android {
-            compileSdkVersion 35
-        }
-    }
-}
-GRADLE
+          printf '\nsubprojects {\n    plugins.withId("com.android.library") {\n        android {\n            compileSdkVersion 35\n        }\n    }\n    plugins.withId("com.android.application") {\n        android {\n            compileSdkVersion 35\n        }\n    }\n}\n' >> android/build.gradle
 
       - name: Get dependencies
         run: flutter pub get
