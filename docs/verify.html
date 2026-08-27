@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Texter - Verify Email</title>
+<style>
+  body { font-family: -apple-system, Roboto, sans-serif; background:#f5f7f7; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+  .card { background:#fff; padding:32px 24px; border-radius:14px; max-width:360px; text-align:center; box-shadow:0 2px 10px rgba(0,0,0,0.08); }
+  h1 { color:#008080; font-size:22px; margin-bottom:8px; }
+  p { color:#555; font-size:15px; line-height:1.5; }
+  .spinner { width:32px; height:32px; border:3px solid #ddd; border-top-color:#008080; border-radius:50%; margin:16px auto; animation:spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Texter</h1>
+    <div id="spinner" class="spinner"></div>
+    <p id="message">Verifying your email...</p>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get('userId');
+    const secret = params.get('secret');
+    const messageEl = document.getElementById('message');
+    const spinnerEl = document.getElementById('spinner');
+
+    async function verify() {
+      if (!userId || !secret) {
+        spinnerEl.style.display = 'none';
+        messageEl.textContent = 'Invalid or missing verification link.';
+        return;
+      }
+      try {
+        const res = await fetch('https://sgp.cloud.appwrite.io/v1/account/verification', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Appwrite-Project': '6a8e7ddd00107e2b7857'
+          },
+          body: JSON.stringify({ userId, secret })
+        });
+        spinnerEl.style.display = 'none';
+        if (res.ok) {
+          messageEl.textContent = 'Your email is verified! You can go back to the Texter app now.';
+        } else {
+          const data = await res.json().catch(() => ({}));
+          messageEl.textContent = data.message || 'Verification failed or link already used.';
+        }
+      } catch (e) {
+        spinnerEl.style.display = 'none';
+        messageEl.textContent = 'Network error. Please try again.';
+      }
+    }
+    verify();
+  </script>
+</body>
+</html>
