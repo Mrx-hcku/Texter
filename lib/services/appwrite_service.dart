@@ -90,6 +90,7 @@ class AppwriteService {
       documentId: ID.unique(),
       data: {
         'type': type,
+        'isGroup': type == 'group',
         'name': name,
         'avatarUrl': '',
         'participantIds': participantIds,
