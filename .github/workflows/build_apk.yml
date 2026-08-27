@@ -38,6 +38,11 @@ jobs:
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/' android/app/build.gradle || true
           sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/' android/app/build.gradle.kts || true
 
+      - name: Set NDK version required by plugins
+        run: |
+          sed -i "/minSdkVersion 21/a\\        ndkVersion = \"25.1.8937393\"" android/app/build.gradle || true
+          sed -i "/minSdk = 21/a\\        ndkVersion = \"25.1.8937393\"" android/app/build.gradle.kts || true
+
       - name: Bump compileSdk to 35 (required by flutter_plugin_android_lifecycle)
         run: |
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/' android/app/build.gradle || true
