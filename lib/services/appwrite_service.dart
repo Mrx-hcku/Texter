@@ -62,7 +62,7 @@ class AppwriteService {
   }
 
   Future<void> sendVerificationEmail() {
-    return account.createVerification(url: 'texter://verify');
+    return account.createVerification(url: 'https://mrx-hcku.github.io/Texter/verify.html');
   }
 
   Future<void> confirmVerification({required String userId, required String secret}) {
