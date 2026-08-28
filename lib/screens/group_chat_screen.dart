@@ -20,6 +20,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   List<AdModel> _ads = [];
   String? _myId;
   bool _loading = true;
+  final Map<String, String> _senderNames = {};
 
   @override
   void initState() {
@@ -34,10 +35,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     try {
       final msgDocs = await AppwriteService.instance.getMessages(widget.groupId);
       final adDocs = await AppwriteService.instance.getAds(targetType: 'group');
+      final messages = msgDocs
+          .map((d) => MessageModel.fromMap(d.data..addAll({'\$id': d.$id, '\$createdAt': d.$createdAt})))
+          .toList();
+      await _fetchSenderNames(messages);
       setState(() {
-        _messages = msgDocs
-            .map((d) => MessageModel.fromMap(d.data..addAll({'\$id': d.$id, '\$createdAt': d.$createdAt})))
-            .toList();
+        _messages = messages;
         _ads = adDocs.map((d) => AdModel.fromMap(d.data..addAll({'\$id': d.$id}))).toList();
         _loading = false;
       });
@@ -45,6 +48,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       setState(() => _loading = false);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load: $e')));
+    }
+  }
+
+  Future<void> _fetchSenderNames(List<MessageModel> messages) async {
+    final ids = messages.map((m) => m.senderId).toSet();
+    ids.removeWhere((id) => id == _myId || _senderNames.containsKey(id));
+    for (final id in ids) {
+      final doc = await AppwriteService.instance.getUserDoc(id);
+      _senderNames[id] = doc?.data['name'] ?? 'Unknown';
     }
   }
 
@@ -69,6 +81,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     for (int i = 0; i < _messages.length; i++) {
       final m = _messages[i];
       final mine = m.senderId == _myId;
+      final senderName = mine ? '' : (_senderNames[m.senderId] ?? '');
       feed.add(Align(
         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
@@ -79,7 +92,20 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             color: mine ? AppTheme.primary : Colors.white,
             borderRadius: BorderRadius.circular(14),
           ),
-          child: Text(m.text, style: TextStyle(color: mine ? Colors.white : Colors.black87)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!mine && senderName.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text(
+                    senderName,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                  ),
+                ),
+              Text(m.text, style: TextStyle(color: mine ? Colors.white : Colors.black87)),
+            ],
+          ),
         ),
       ));
       if (_ads.isNotEmpty && (i + 1) % 6 == 0) {
