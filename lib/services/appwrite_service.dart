@@ -187,15 +187,20 @@ class AppwriteService {
         'type': attachmentType.isNotEmpty ? attachmentType : 'text',
       },
     );
-    await databases.updateDocument(
-      databaseId: AppwriteConfig.databaseId,
-      collectionId: AppwriteConfig.chatsCollection,
-      documentId: chatId,
-      data: {
-        'lastMessage': text.isNotEmpty ? text : 'Attachment',
-        'lastMessageTime': DateTime.now().toIso8601String(),
-      },
-    );
+    // Best-effort: only relevant for direct chats stored in the `chats`
+    // collection. Groups/channels use their own doc ID as chatId and
+    // don't have a matching `chats` document, so this must not fail send.
+    try {
+      await databases.updateDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.chatsCollection,
+        documentId: chatId,
+        data: {
+          'lastMessage': text.isNotEmpty ? text : 'Attachment',
+          'lastMessageTime': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (_) {}
     return doc;
   }
 
