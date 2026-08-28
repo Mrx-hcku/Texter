@@ -121,6 +121,7 @@ class GroupModel {
   final String avatarUrl;
   final List<String> memberIds;
   final List<String> adminIds;
+  final bool isPublic;
 
   GroupModel({
     required this.id,
@@ -129,6 +130,7 @@ class GroupModel {
     this.avatarUrl = '',
     this.memberIds = const [],
     this.adminIds = const [],
+    this.isPublic = true,
   });
 
   factory GroupModel.fromMap(Map<String, dynamic> map) => GroupModel(
@@ -138,6 +140,7 @@ class GroupModel {
         avatarUrl: map['avatarUrl'] ?? '',
         memberIds: List<String>.from(map['memberIds'] ?? []),
         adminIds: List<String>.from(map['adminIds'] ?? []),
+        isPublic: map['isPublic'] ?? true,
       );
 }
 

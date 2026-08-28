@@ -19,6 +19,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   String? _myId;
   bool _loading = true;
   bool _creating = false;
+  bool _isPublic = true;
 
   @override
   void initState() {
@@ -39,19 +40,26 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   Future<void> _create() async {
     if (_nameCtrl.text.trim().isEmpty || _myId == null || _creating) return;
     setState(() => _creating = true);
-    final members = [_myId!, ..._selected];
-    final group = await AppwriteService.instance.createGroup(
-      name: _nameCtrl.text.trim(),
-      description: _descCtrl.text.trim(),
-      memberIds: members,
-      creatorId: _myId!,
-    );
-    setState(() => _creating = false);
-    if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => GroupChatScreen(groupId: group.$id, groupName: group.data['name'])),
-    );
+    try {
+      final members = [_myId!, ..._selected];
+      final group = await AppwriteService.instance.createGroup(
+        name: _nameCtrl.text.trim(),
+        description: _descCtrl.text.trim(),
+        memberIds: members,
+        creatorId: _myId!,
+        isPublic: _isPublic,
+      );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => GroupChatScreen(groupId: group.$id, groupName: group.data['name'])),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to create group: $e')));
+    } finally {
+      if (mounted) setState(() => _creating = false);
+    }
   }
 
   @override
@@ -74,7 +82,18 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Group Name')),
                 const SizedBox(height: 12),
                 TextField(controller: _descCtrl, decoration: const InputDecoration(labelText: 'Description (optional)')),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: AppTheme.primary,
+                  value: _isPublic,
+                  title: const Text('Public group'),
+                  subtitle: Text(_isPublic
+                      ? 'Anyone can find and join this group'
+                      : 'Only people you add can join'),
+                  onChanged: (v) => setState(() => _isPublic = v),
+                ),
+                const SizedBox(height: 12),
                 Text('Add Members', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 ..._users.map((u) {

@@ -4,6 +4,7 @@ import '../services/appwrite_service.dart';
 import '../models/models.dart';
 import '../widgets/sponsored_ad_card.dart';
 import 'create_channel_screen.dart';
+import 'channel_view_screen.dart';
 
 class ChannelsScreen extends StatefulWidget {
   const ChannelsScreen({super.key});
@@ -66,7 +67,10 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
                 ],
               ),
             ),
-            TextButton(onPressed: () {}, child: const Text('View')),
+            TextButton(onPressed: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => ChannelViewScreen(channelId: c.id)));
+              _load();
+            }, child: const Text('View')),
           ],
         ),
       ));

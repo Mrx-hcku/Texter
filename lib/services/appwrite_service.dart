@@ -225,6 +225,7 @@ class AppwriteService {
     required String description,
     required List<String> memberIds,
     required String creatorId,
+    bool isPublic = true,
   }) {
     return databases.createDocument(
       databaseId: AppwriteConfig.databaseId,
@@ -236,7 +237,40 @@ class AppwriteService {
         'avatarUrl': '',
         'memberIds': memberIds,
         'adminIds': [creatorId],
+        'isPublic': isPublic,
       },
+    );
+  }
+
+  Future<void> joinGroup({required String groupId, required String userId}) async {
+    final doc = await databases.getDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.groupsCollection,
+      documentId: groupId,
+    );
+    final members = List<String>.from(doc.data['memberIds'] ?? []);
+    if (!members.contains(userId)) members.add(userId);
+    await databases.updateDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.groupsCollection,
+      documentId: groupId,
+      data: {'memberIds': members},
+    );
+  }
+
+  Future<void> leaveGroup({required String groupId, required String userId}) async {
+    final doc = await databases.getDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.groupsCollection,
+      documentId: groupId,
+    );
+    final members = List<String>.from(doc.data['memberIds'] ?? []);
+    members.remove(userId);
+    await databases.updateDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.groupsCollection,
+      documentId: groupId,
+      data: {'memberIds': members},
     );
   }
 
@@ -265,6 +299,38 @@ class AppwriteService {
         'subscriberCount': 1,
         'subscriberIds': [creatorId],
       },
+    );
+  }
+
+  Future<void> subscribeChannel({required String channelId, required String userId}) async {
+    final doc = await databases.getDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.channelsCollection,
+      documentId: channelId,
+    );
+    final subs = List<String>.from(doc.data['subscriberIds'] ?? []);
+    if (!subs.contains(userId)) subs.add(userId);
+    await databases.updateDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.channelsCollection,
+      documentId: channelId,
+      data: {'subscriberIds': subs, 'subscriberCount': subs.length},
+    );
+  }
+
+  Future<void> unsubscribeChannel({required String channelId, required String userId}) async {
+    final doc = await databases.getDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.channelsCollection,
+      documentId: channelId,
+    );
+    final subs = List<String>.from(doc.data['subscriberIds'] ?? []);
+    subs.remove(userId);
+    await databases.updateDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.channelsCollection,
+      documentId: channelId,
+      data: {'subscriberIds': subs, 'subscriberCount': subs.length},
     );
   }
 
