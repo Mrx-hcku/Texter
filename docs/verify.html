@@ -45,8 +45,7 @@
         if (res.ok) {
           messageEl.textContent = 'Your email is verified! You can go back to the Texter app now.';
         } else {
-          const data = await res.json().catch(() => ({}));
-          messageEl.textContent = data.message || 'Verification failed or link already used.';
+          messageEl.textContent = "This link was already used — likely by Gmail's automatic link scan. Your account is probably already verified. Just open the Texter app and continue.";
         }
       } catch (e) {
         spinnerEl.style.display = 'none';

@@ -97,9 +97,9 @@ class MessageModel {
         id: map['\$id'] ?? '',
         chatId: map['chatId'] ?? '',
         senderId: map['senderId'] ?? '',
-        text: map['text'] ?? '',
-        attachmentUrl: map['attachmentUrl'] ?? '',
-        attachmentType: map['attachmentType'] ?? '',
+        text: map['message'] ?? map['text'] ?? '',
+        attachmentUrl: map['mediaUrl'] ?? map['attachmentUrl'] ?? '',
+        attachmentType: (map['type'] == null || map['type'] == 'text') ? '' : map['type'],
         status: map['status'] ?? 'sent',
         createdAt: DateTime.tryParse(map['\$createdAt'] ?? '') ?? DateTime.now(),
       );

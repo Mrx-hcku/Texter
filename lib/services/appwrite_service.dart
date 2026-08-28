@@ -89,7 +89,6 @@ class AppwriteService {
       collectionId: AppwriteConfig.chatsCollection,
       documentId: ID.unique(),
       data: {
-        'type': type,
         'isGroup': type == 'group',
         'name': name,
         'avatarUrl': '',
@@ -99,6 +98,9 @@ class AppwriteService {
     );
   }
 
+  /// Finds an existing direct chat between two users, or creates one.
+  /// [otherName] is used only as the chat's display name if a new chat
+  /// document has to be created.
   Future<models.Document> findOrCreateDirectChat({
     required String myId,
     required String otherId,
@@ -106,7 +108,7 @@ class AppwriteService {
   }) async {
     final existing = await getChats(myId);
     for (final doc in existing) {
-      if (doc.data['type'] == 'direct') {
+      if (doc.data['isGroup'] == false) {
         final ids = List<String>.from(doc.data['participantIds'] ?? []);
         if (ids.contains(otherId)) return doc;
       }
@@ -180,10 +182,9 @@ class AppwriteService {
       data: {
         'chatId': chatId,
         'senderId': senderId,
-        'text': text,
-        'attachmentUrl': attachmentUrl,
-        'attachmentType': attachmentType,
-        'status': 'sent',
+        'message': text,
+        'mediaUrl': attachmentUrl,
+        'type': attachmentType.isNotEmpty ? attachmentType : 'text',
       },
     );
     await databases.updateDocument(
