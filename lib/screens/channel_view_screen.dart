@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import '../models/models.dart';
@@ -18,6 +19,7 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
   String? _myId;
   bool _loading = true;
   bool _busy = false;
+  RealtimeSubscription? _sub;
 
   bool get _isSubscribed => _channel != null && _myId != null && _channel!.subscriberIds.contains(_myId);
 
@@ -25,6 +27,12 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
   void initState() {
     super.initState();
     _init();
+  }
+
+  @override
+  void dispose() {
+    _sub?.close();
+    super.dispose();
   }
 
   Future<void> _init() async {
@@ -49,6 +57,13 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load channel: $e')));
     }
+    _sub ??= AppwriteService.instance.subscribeToMessages(widget.channelId, (doc) {
+      if (_posts.any((p) => p.id == doc.$id)) return;
+      if (!mounted) return;
+      setState(() {
+        _posts.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
+      });
+    });
   }
 
   Future<void> _toggleSubscribe() async {
@@ -75,9 +90,11 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
     _controller.clear();
     try {
       final doc = await AppwriteService.instance.sendMessage(chatId: widget.channelId, senderId: _myId!, text: text);
-      setState(() {
-        _posts.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
-      });
+      if (!_posts.any((p) => p.id == doc.$id)) {
+        setState(() {
+          _posts.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to post: $e')));
