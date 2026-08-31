@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import '../models/models.dart';
@@ -18,11 +19,18 @@ class _GroupsScreenState extends State<GroupsScreen> {
   bool _loading = true;
   String? _myId;
   final Set<String> _joining = {};
+  RealtimeSubscription? _sub;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _sub?.close();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -42,6 +50,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load groups: $e')));
     }
+    _sub ??= AppwriteService.instance.subscribeToCollection('groups', (doc, events) {
+      _load();
+    });
   }
 
   Future<void> _join(GroupModel g) async {
