@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
@@ -16,6 +17,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
   List<models.Document> _chats = [];
   String _query = '';
   bool _loading = true;
+  String? _myId;
+  RealtimeSubscription? _sub;
 
   @override
   void initState() {
@@ -23,9 +26,16 @@ class _ChatListScreenState extends State<ChatListScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _sub?.close();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     final user = await AppwriteService.instance.getCurrentUser();
     if (user == null) return;
+    _myId = user.$id;
     try {
       final chats = await AppwriteService.instance.getChats(user.$id);
       setState(() {
@@ -35,12 +45,25 @@ class _ChatListScreenState extends State<ChatListScreen> {
     } catch (_) {
       setState(() => _loading = false);
     }
+    _sub ??= AppwriteService.instance.subscribeToCollection('chats', (doc, events) {
+      final ids = List<String>.from(doc.data['participantIds'] ?? []);
+      if (_myId == null || !ids.contains(_myId)) return;
+      if (!mounted) return;
+      setState(() {
+        final i = _chats.indexWhere((c) => c.$id == doc.$id);
+        if (i >= 0) {
+          _chats[i] = doc;
+        } else {
+          _chats.insert(0, doc);
+        }
+      });
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final filtered = _chats.where((c) {
-      final name = (c.data['name'] ?? '').toString().toLowerCase();
+      final name = (c.data['chatName'] ?? '').toString().toLowerCase();
       return name.contains(_query.toLowerCase());
     }).toList();
 
@@ -75,7 +98,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           itemCount: filtered.length,
                           itemBuilder: (context, i) {
                             final c = filtered[i];
-                            final name = c.data['name'] ?? '';
+                            final name = c.data['chatName'] ?? '';
                             return ListTile(
                               leading: CircleAvatar(
                                 radius: 26,
