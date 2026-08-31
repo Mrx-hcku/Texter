@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import '../services/ads_service.dart';
@@ -21,12 +22,19 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   String? _myId;
   bool _loading = true;
   final Map<String, String> _senderNames = {};
+  RealtimeSubscription? _sub;
 
   @override
   void initState() {
     super.initState();
     _init();
     AdsService.showInterstitial();
+  }
+
+  @override
+  void dispose() {
+    _sub?.close();
+    super.dispose();
   }
 
   Future<void> _init() async {
@@ -49,6 +57,16 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load: $e')));
     }
+    _sub = AppwriteService.instance.subscribeToMessages(widget.groupId, (doc) async {
+      if (_messages.any((m) => m.id == doc.$id)) return;
+      final msg = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
+      if (msg.senderId != _myId && !_senderNames.containsKey(msg.senderId)) {
+        final u = await AppwriteService.instance.getUserDoc(msg.senderId);
+        _senderNames[msg.senderId] = u?.data['name'] ?? 'Unknown';
+      }
+      if (!mounted) return;
+      setState(() => _messages.add(msg));
+    });
   }
 
   Future<void> _fetchSenderNames(List<MessageModel> messages) async {
@@ -66,9 +84,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     _controller.clear();
     try {
       final doc = await AppwriteService.instance.sendMessage(chatId: widget.groupId, senderId: _myId!, text: text);
-      setState(() {
-        _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
-      });
+      if (!_messages.any((m) => m.id == doc.$id)) {
+        setState(() {
+          _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send: $e')));
