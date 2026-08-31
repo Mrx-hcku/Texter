@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import '../models/models.dart';
@@ -17,11 +18,18 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
   List<ChannelModel> _channels = [];
   List<AdModel> _ads = [];
   bool _loading = true;
+  RealtimeSubscription? _sub;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _sub?.close();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -38,6 +46,9 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load channels: $e')));
     }
+    _sub ??= AppwriteService.instance.subscribeToCollection('channels', (doc, events) {
+      _load();
+    });
   }
 
   @override
