@@ -90,8 +90,7 @@ class AppwriteService {
       documentId: ID.unique(),
       data: {
         'isGroup': type == 'group',
-        'name': name,
-        'avatarUrl': '',
+        'chatName': name,
         'participantIds': participantIds,
         'lastMessage': '',
       },
@@ -197,7 +196,6 @@ class AppwriteService {
         documentId: chatId,
         data: {
           'lastMessage': text.isNotEmpty ? text : 'Attachment',
-          'lastMessageTime': DateTime.now().toIso8601String(),
         },
       );
     } catch (_) {}
@@ -213,6 +211,22 @@ class AppwriteService {
       if (data['chatId'] == chatId && event.events.any((e) => e.contains('create'))) {
         onMessage(models.Document.fromMap(data));
       }
+    });
+    return sub;
+  }
+
+  /// Generic realtime listener for a whole collection — calls [onChange]
+  /// with the changed document and its Appwrite event list (e.g.
+  /// ["...documents.*.create"]) on every create/update/delete.
+  RealtimeSubscription subscribeToCollection(
+    String collectionId,
+    void Function(models.Document doc, List<String> events) onChange,
+  ) {
+    final sub = realtime.subscribe([
+      'databases.${AppwriteConfig.databaseId}.collections.$collectionId.documents'
+    ]);
+    sub.stream.listen((event) {
+      onChange(models.Document.fromMap(event.payload), event.events);
     });
     return sub;
   }
