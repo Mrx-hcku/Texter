@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import '../models/models.dart';
@@ -20,6 +22,7 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
   List<MessageModel> _messages = [];
   String? _myId;
   RealtimeSubscription? _sub;
+  bool _uploading = false;
 
   @override
   void initState() {
@@ -64,16 +67,67 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
   }
 
   Future<void> _attachImage() async {
+    if (_myId == null) return;
     final picker = ImagePicker();
     final file = await picker.pickImage(source: ImageSource.gallery);
-    if (file == null || _myId == null) return;
-    final url = await AppwriteService.instance.uploadFile(file.path, file.name);
-    await AppwriteService.instance.sendMessage(
-      chatId: widget.chatId,
-      senderId: _myId!,
-      attachmentUrl: url,
-      attachmentType: 'image',
-    );
+    if (file == null) return;
+    setState(() => _uploading = true);
+    try {
+      final url = await AppwriteService.instance.uploadFile(file.path, file.name);
+      final doc = await AppwriteService.instance.sendMessage(
+        chatId: widget.chatId,
+        senderId: _myId!,
+        attachmentUrl: url,
+        attachmentType: 'image',
+      );
+      if (!_messages.any((m) => m.id == doc.$id)) {
+        setState(() {
+          _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to upload image: $e')));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _attachFile() async {
+    if (_myId == null || _uploading) return;
+    final result = await FilePicker.platform.pickFiles(withData: false);
+    if (result == null || result.files.single.path == null) return;
+    final path = result.files.single.path!;
+    final fileName = result.files.single.name;
+    setState(() => _uploading = true);
+    try {
+      final url = await AppwriteService.instance.uploadFile(path, fileName);
+      final doc = await AppwriteService.instance.sendMessage(
+        chatId: widget.chatId,
+        senderId: _myId!,
+        text: fileName,
+        attachmentUrl: url,
+        attachmentType: 'file',
+      );
+      if (!_messages.any((m) => m.id == doc.$id)) {
+        setState(() {
+          _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to upload file: $e')));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _openFile(String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open file')));
+    }
   }
 
   @override
@@ -93,6 +147,35 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
               itemBuilder: (context, i) {
                 final m = _messages[i];
                 final mine = m.senderId == _myId;
+                Widget content;
+                if (m.attachmentType == 'image' && m.attachmentUrl.isNotEmpty) {
+                  content = ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(m.attachmentUrl, width: 200, fit: BoxFit.cover),
+                  );
+                } else if (m.attachmentType == 'file' && m.attachmentUrl.isNotEmpty) {
+                  content = InkWell(
+                    onTap: () => _openFile(m.attachmentUrl),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.insert_drive_file, color: mine ? Colors.white : AppTheme.primary),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            m.text.isNotEmpty ? m.text : 'File',
+                            style: TextStyle(
+                              color: mine ? Colors.white : Colors.black87,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                } else {
+                  content = Text(m.text, style: TextStyle(color: mine ? Colors.white : Colors.black87));
+                }
                 return Align(
                   alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
@@ -103,27 +186,20 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                       color: mine ? AppTheme.primary : Colors.white,
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: m.attachmentType == 'image' && m.attachmentUrl.isNotEmpty
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(m.attachmentUrl, width: 200, fit: BoxFit.cover),
-                          )
-                        : Text(
-                            m.text,
-                            style: TextStyle(color: mine ? Colors.white : Colors.black87),
-                          ),
+                    child: content,
                   ),
                 );
               },
             ),
           ),
+          if (_uploading) const LinearProgressIndicator(minHeight: 2),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               child: Row(
                 children: [
-                  IconButton(icon: const Icon(Icons.image_outlined), onPressed: _attachImage),
-                  IconButton(icon: const Icon(Icons.attach_file), onPressed: () {}),
+                  IconButton(icon: const Icon(Icons.image_outlined), onPressed: _uploading ? null : _attachImage),
+                  IconButton(icon: const Icon(Icons.attach_file), onPressed: _uploading ? null : _attachFile),
                   Expanded(
                     child: TextField(
                       controller: _controller,

@@ -91,7 +91,7 @@ class AppwriteService {
       data: {
         'isGroup': type == 'group',
         'chatName': name,
-        'participantIds': participantIds,
+        'participantIds': participantIds.join(','),
         'lastMessage': '',
       },
     );
@@ -108,7 +108,7 @@ class AppwriteService {
     final existing = await getChats(myId);
     for (final doc in existing) {
       if (doc.data['isGroup'] == false) {
-        final ids = List<String>.from(doc.data['participantIds'] ?? []);
+        final ids = (doc.data['participantIds'] as String? ?? '').split(',').where((e) => e.isNotEmpty).toList();
         if (ids.contains(otherId)) return doc;
       }
     }

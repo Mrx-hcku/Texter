@@ -18,6 +18,7 @@ dependencies:
   unity_ads_plugin: ^0.3.20
   uuid: ^4.5.1
   file_picker: ^8.1.2
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:

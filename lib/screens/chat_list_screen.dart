@@ -46,7 +46,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       setState(() => _loading = false);
     }
     _sub ??= AppwriteService.instance.subscribeToCollection('chats', (doc, events) {
-      final ids = List<String>.from(doc.data['participantIds'] ?? []);
+      final ids = (doc.data['participantIds'] as String? ?? '').split(',').where((e) => e.isNotEmpty).toList();
       if (_myId == null || !ids.contains(_myId)) return;
       if (!mounted) return;
       setState(() {
