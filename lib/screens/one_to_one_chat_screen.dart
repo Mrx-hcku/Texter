@@ -57,9 +57,11 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
     _controller.clear();
     try {
       final doc = await AppwriteService.instance.sendMessage(chatId: widget.chatId, senderId: _myId!, text: text);
-      setState(() {
-        _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
-      });
+      if (!_messages.any((m) => m.id == doc.$id)) {
+        setState(() {
+          _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send: $e')));
