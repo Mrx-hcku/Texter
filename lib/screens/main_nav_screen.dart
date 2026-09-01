@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import '../config/theme.dart';
 import 'chat_list_screen.dart';
-import 'groups_screen.dart';
 import 'channels_screen.dart';
+import 'groups_screen.dart';
 import 'profile_screen.dart';
 
 class MainNavScreen extends StatefulWidget {
@@ -17,8 +16,8 @@ class _MainNavScreenState extends State<MainNavScreen> {
 
   final _screens = const [
     ChatListScreen(),
-    GroupsScreen(),
     ChannelsScreen(),
+    GroupsScreen(),
     ProfileScreen(),
   ];
 
@@ -28,42 +27,62 @@ class _MainNavScreenState extends State<MainNavScreen> {
       backgroundColor: const Color(0xFF05070B),
       body: IndexedStack(index: _index, children: _screens),
       bottomNavigationBar: Container(
-        margin: const EdgeInsets.all(16),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
         decoration: BoxDecoration(
           color: const Color(0xFF0E131F),
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: const Color(0xFF00F0FF).withOpacity(0.2)),
+          border: Border.all(color: const Color(0xFF00F0FF).withOpacity(0.3), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF00F0FF).withOpacity(0.1),
+              blurRadius: 10,
+              spreadRadius: 1,
+            ),
+          ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(30),
-          child: NavigationBar(
-            backgroundColor: Colors.transparent,
-            selectedIndex: _index,
-            onDestinationSelected: (i) => setState(() => _index = i),
-            indicatorColor: const Color(0xFF00F0FF).withOpacity(0.2),
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.chat_bubble_outline, color: Colors.grey),
-                selectedIcon: Icon(Icons.chat_bubble, color: Color(0xFF00F0FF)),
-                label: 'Chats',
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildNavItem(0, Icons.chat_bubble, Icons.chat_bubble_outline, 'Chats'),
+            _buildNavItem(1, Icons.hub, Icons.hub_outlined, 'Channels'),
+            _buildNavItem(2, Icons.group, Icons.group_outlined, 'Groups'),
+            _buildNavItem(3, Icons.person, Icons.person_outline, 'Profile'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(int index, IconData activeIcon, IconData inactiveIcon, String label) {
+    final isSelected = _index == index;
+    return GestureDetector(
+      onTap: () => setState(() => _index = index),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF00F0FF).withOpacity(0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isSelected ? activeIcon : inactiveIcon,
+              color: isSelected ? const Color(0xFF00F0FF) : Colors.white54,
+              size: 22,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? const Color(0xFF00F0FF) : Colors.white54,
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
-              NavigationDestination(
-                icon: Icon(Icons.groups_outlined, color: Colors.grey),
-                selectedIcon: Icon(Icons.groups, color: Color(0xFF00F0FF)),
-                label: 'Groups',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.campaign_outlined, color: Colors.grey),
-                selectedIcon: Icon(Icons.campaign, color: Color(0xFF00F0FF)),
-                label: 'Channels',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.person_outline, color: Colors.grey),
-                selectedIcon: Icon(Icons.person, color: Color(0xFF00F0FF)),
-                label: 'Profile',
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

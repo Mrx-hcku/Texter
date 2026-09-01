@@ -135,9 +135,16 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF05070B),
       appBar: AppBar(
-        title: Text(widget.chatName),
-        actions: [IconButton(icon: const Icon(Icons.more_vert), onPressed: () {})],
+        backgroundColor: const Color(0xFF05070B),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Color(0xFF00F0FF)),
+        title: Text(
+          widget.chatName,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        actions: [IconButton(icon: const Icon(Icons.more_vert, color: Color(0xFF00F0FF)), onPressed: () {})],
       ),
       body: Column(
         children: [
@@ -161,14 +168,15 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.insert_drive_file, color: mine ? Colors.white : AppTheme.primary),
+                        const Icon(Icons.insert_drive_file, color: Color(0xFF00F0FF)),
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
                             m.text.isNotEmpty ? m.text : 'File',
-                            style: TextStyle(
-                              color: mine ? Colors.white : Colors.black87,
+                            style: const TextStyle(
+                              color: Colors.white,
                               decoration: TextDecoration.underline,
+                              decorationColor: Color(0xFF00F0FF),
                             ),
                           ),
                         ),
@@ -176,17 +184,24 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                     ),
                   );
                 } else {
-                  content = Text(m.text, style: TextStyle(color: mine ? Colors.white : Colors.black87));
+                  content = Text(
+                    m.text, 
+                    style: TextStyle(color: mine ? Colors.white : Colors.white70, fontSize: 14),
+                  );
                 }
                 return Align(
                   alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
                     decoration: BoxDecoration(
-                      color: mine ? AppTheme.primary : Colors.white,
-                      borderRadius: BorderRadius.circular(14),
+                      color: const Color(0xFF0E131F),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: mine ? const Color(0xFFFF007F).withOpacity(0.6) : const Color(0xFF00F0FF).withOpacity(0.4),
+                        width: 1.5,
+                      ),
                     ),
                     child: content,
                   ),
@@ -194,27 +209,48 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
               },
             ),
           ),
-          if (_uploading) const LinearProgressIndicator(minHeight: 2),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          if (_uploading) const LinearProgressIndicator(minHeight: 2, color: Color(0xFF00F0FF), backgroundColor: Color(0xFF0E131F)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            color: const Color(0xFF05070B),
+            child: SafeArea(
               child: Row(
                 children: [
-                  IconButton(icon: const Icon(Icons.image_outlined), onPressed: _uploading ? null : _attachImage),
-                  IconButton(icon: const Icon(Icons.attach_file), onPressed: _uploading ? null : _attachFile),
+                  IconButton(
+                    icon: const Icon(Icons.image_outlined, color: Color(0xFF00F0FF)), 
+                    onPressed: _uploading ? null : _attachImage,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.attach_file, color: Color(0xFF00F0FF)), 
+                    onPressed: _uploading ? null : _attachFile,
+                  ),
                   Expanded(
                     child: TextField(
                       controller: _controller,
-                      decoration: const InputDecoration(
-                        hintText: 'Message',
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Secure message...',
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        filled: true,
+                        fillColor: const Color(0xFF0E131F),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 6),
-                  CircleAvatar(
-                    backgroundColor: AppTheme.primary,
-                    child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 20), onPressed: _send),
+                  Container(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFF00F0FF),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Color(0xFF05070B), size: 20), 
+                      onPressed: _send,
+                    ),
                   ),
                 ],
               ),
