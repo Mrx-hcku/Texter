@@ -70,23 +70,27 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 40),
-              Text(
-                'Texter',
-                style: TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.primary,
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: AppTheme.glowBorder(),
+                child: const CircleAvatar(
+                  radius: 34,
+                  backgroundColor: AppTheme.surfaceLight,
+                  child: Icon(Icons.bolt, color: AppTheme.cyan, size: 34),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
+              Text('TEXTER', style: AppTheme.heading(size: 36)),
+              const SizedBox(height: 6),
               Text(
-                _isSignUp ? 'Create your account' : 'Welcome back to Texter',
-                style: const TextStyle(fontSize: 16, color: Colors.black54),
+                _isSignUp ? 'Create your account' : 'Welcome back',
+                style: AppTheme.body(color: AppTheme.textSecondary),
               ),
               const SizedBox(height: 32),
               if (_isSignUp) ...[
                 TextField(
                   controller: _nameCtrl,
+                  style: AppTheme.body(color: Colors.white),
                   decoration: const InputDecoration(labelText: 'Full Name'),
                 ),
                 const SizedBox(height: 16),
@@ -94,32 +98,34 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _emailCtrl,
                 keyboardType: TextInputType.emailAddress,
+                style: AppTheme.body(color: Colors.white),
                 decoration: const InputDecoration(labelText: 'Gmail Address'),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _passCtrl,
                 obscureText: _obscure,
+                style: AppTheme.body(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Password',
                   suffixIcon: IconButton(
-                    icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                    icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, color: AppTheme.textSecondary),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                Text(_error!, style: TextStyle(color: AppTheme.pink, fontSize: 13)),
               ],
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _loading ? null : _submit,
                 child: _loading
-                    ? const SizedBox(
+                    ? SizedBox(
                         height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.bg),
                       )
                     : Text(_isSignUp ? 'Sign Up' : 'Log In'),
               ),
@@ -129,6 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: () => setState(() => _isSignUp = !_isSignUp),
                   child: Text(
                     _isSignUp ? 'Already have an account? Log In' : "Don't have an account? Sign Up",
+                    style: const TextStyle(color: AppTheme.cyan),
                   ),
                 ),
               ),

@@ -74,29 +74,41 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 
   Widget _groupTile(GroupModel g, {required bool isMember}) {
-    return ListTile(
-      leading: CircleAvatar(
-        radius: 26,
-        backgroundColor: AppTheme.primary,
-        child: Text(g.name.isNotEmpty ? g.name[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white)),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
+      child: ListTile(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        leading: Container(
+          padding: const EdgeInsets.all(2),
+          decoration: AppTheme.glowBorder(color: AppTheme.cyan),
+          child: CircleAvatar(
+            radius: 22,
+            backgroundColor: AppTheme.surfaceLight,
+            child: Text(g.name.isNotEmpty ? g.name[0].toUpperCase() : '?', style: AppTheme.heading(size: 15, color: Colors.white)),
+          ),
+        ),
+        title: Text(g.name, style: AppTheme.body(size: 15, weight: FontWeight.w600, color: Colors.white)),
+        subtitle: Text(
+          '${g.memberIds.length} members${g.isPublic ? '' : ' · Private'}',
+          style: AppTheme.body(size: 12, color: AppTheme.textSecondary),
+        ),
+        trailing: isMember
+            ? const Icon(Icons.chevron_right, color: AppTheme.textSecondary)
+            : ElevatedButton(
+                onPressed: _joining.contains(g.id) ? null : () => _join(g),
+                style: ElevatedButton.styleFrom(minimumSize: const Size(70, 34), padding: EdgeInsets.zero),
+                child: _joining.contains(g.id)
+                    ? SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.bg))
+                    : const Text('Join'),
+              ),
+        onTap: isMember
+            ? () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => GroupChatScreen(groupId: g.id, groupName: g.name)),
+                )
+            : null,
       ),
-      title: Text(g.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text('${g.memberIds.length} members${g.isPublic ? '' : ' · Private'}'),
-      trailing: isMember
-          ? null
-          : ElevatedButton(
-              onPressed: _joining.contains(g.id) ? null : () => _join(g),
-              style: ElevatedButton.styleFrom(minimumSize: const Size(70, 34), padding: EdgeInsets.zero),
-              child: _joining.contains(g.id)
-                  ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('Join'),
-            ),
-      onTap: isMember
-          ? () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => GroupChatScreen(groupId: g.id, groupName: g.name)),
-              )
-          : null,
     );
   }
 
@@ -111,27 +123,30 @@ class _GroupsScreenState extends State<GroupsScreen> {
         })],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.cyan))
           : RefreshIndicator(
               onRefresh: _load,
+              backgroundColor: AppTheme.surface,
+              color: AppTheme.cyan,
               child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 children: [
                   if (_myGroups.isEmpty && _discoverGroups.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 60),
-                      child: Center(child: Text('No groups yet — create one!')),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 60),
+                      child: Center(child: Text('No groups yet — create one!', style: AppTheme.body(color: AppTheme.textSecondary))),
                     ),
                   if (_myGroups.isNotEmpty) ...[
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: Text('My Groups', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+                      child: Text('MY GROUPS', style: AppTheme.body(size: 12, weight: FontWeight.w700, color: AppTheme.cyan)),
                     ),
                     ..._myGroups.map((g) => _groupTile(g, isMember: true)),
                   ],
                   if (_discoverGroups.isNotEmpty) ...[
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: Text('Discover Public Groups', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+                      child: Text('DISCOVER PUBLIC GROUPS', style: AppTheme.body(size: 12, weight: FontWeight.w700, color: AppTheme.pink)),
                     ),
                     ..._discoverGroups.map((g) => _groupTile(g, isMember: false)),
                   ],

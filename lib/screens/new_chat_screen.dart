@@ -67,27 +67,38 @@ class _NewChatScreenState extends State<NewChatScreen> {
             padding: const EdgeInsets.all(12),
             child: TextField(
               onChanged: _load,
-              decoration: const InputDecoration(hintText: 'Search by name', prefixIcon: Icon(Icons.search)),
+              style: AppTheme.body(color: Colors.white),
+              decoration: const InputDecoration(hintText: 'Search by name', prefixIcon: Icon(Icons.search, color: AppTheme.textSecondary)),
             ),
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.cyan))
                 : _users.isEmpty
-                    ? const Center(child: Text('No users found'))
+                    ? Center(child: Text('No users found', style: AppTheme.body(color: AppTheme.textSecondary)))
                     : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
                         itemCount: _users.length,
                         itemBuilder: (context, i) {
                           final u = _users[i];
                           final name = u.data['name'] ?? '';
-                          return ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: AppTheme.primary,
-                              child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white)),
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(14)),
+                            child: ListTile(
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              leading: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: AppTheme.glowBorder(),
+                                child: CircleAvatar(
+                                  backgroundColor: AppTheme.surfaceLight,
+                                  child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: AppTheme.heading(size: 14, color: Colors.white)),
+                                ),
+                              ),
+                              title: Text(name, style: AppTheme.body(color: Colors.white, weight: FontWeight.w600)),
+                              subtitle: Text(u.data['email'] ?? '', style: AppTheme.body(size: 12, color: AppTheme.textSecondary)),
+                              onTap: () => _startChat(u),
                             ),
-                            title: Text(name),
-                            subtitle: Text(u.data['email'] ?? ''),
-                            onTap: () => _startChat(u),
                           );
                         },
                       ),

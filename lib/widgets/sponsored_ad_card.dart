@@ -12,9 +12,9 @@ class SponsoredAdCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE0E6E6)),
+        border: Border.all(color: AppTheme.pink.withOpacity(0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -23,9 +23,9 @@ class SponsoredAdCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: Row(
               children: [
-                Icon(Icons.campaign, size: 14, color: Colors.grey.shade600),
+                const Icon(Icons.campaign, size: 14, color: AppTheme.pink),
                 const SizedBox(width: 4),
-                Text('Sponsored', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                Text('SPONSORED', style: AppTheme.body(size: 11, weight: FontWeight.w700, color: AppTheme.pink)),
               ],
             ),
           ),
@@ -39,7 +39,7 @@ class SponsoredAdCard extends StatelessWidget {
                   height: 150,
                   width: double.infinity,
                   fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) => Container(height: 150, color: Colors.grey.shade200),
+                  errorWidget: (_, __, ___) => Container(height: 150, color: AppTheme.surfaceLight),
                 ),
               ),
             ),
@@ -48,17 +48,17 @@ class SponsoredAdCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(ad.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(ad.title, style: AppTheme.body(size: 15, weight: FontWeight.w700, color: Colors.white)),
                 if (ad.description.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(ad.description, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+                  Text(ad.description, style: AppTheme.body(size: 12.5, color: AppTheme.textSecondary)),
                 ],
                 const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {},
-                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.pink, minimumSize: const Size.fromHeight(42)),
                     child: Text(ad.actionText),
                   ),
                 ),

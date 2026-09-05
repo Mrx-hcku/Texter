@@ -70,52 +70,69 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         actions: [
           TextButton(
             onPressed: _creating ? null : _create,
-            child: Text('Create', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: _creating ? 0 : 16)),
+            child: Text('Create', style: TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.bold, fontSize: _creating ? 0 : 16)),
           ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.cyan))
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Group Name')),
-                const SizedBox(height: 12),
-                TextField(controller: _descCtrl, decoration: const InputDecoration(labelText: 'Description (optional)')),
-                const SizedBox(height: 12),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  activeColor: AppTheme.primary,
-                  value: _isPublic,
-                  title: const Text('Public group'),
-                  subtitle: Text(_isPublic
-                      ? 'Anyone can find and join this group'
-                      : 'Only people you add can join'),
-                  onChanged: (v) => setState(() => _isPublic = v),
+                TextField(
+                  controller: _nameCtrl,
+                  style: AppTheme.body(color: Colors.white),
+                  decoration: const InputDecoration(labelText: 'Group Name'),
                 ),
                 const SizedBox(height: 12),
-                Text('Add Members', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                ..._users.map((u) {
-                  final name = u.data['name'] ?? '';
-                  final selected = _selected.contains(u.$id);
-                  return CheckboxListTile(
-                    value: selected,
-                    onChanged: (v) => setState(() {
-                      if (v == true) {
-                        _selected.add(u.$id);
-                      } else {
-                        _selected.remove(u.$id);
-                      }
-                    }),
-                    activeColor: AppTheme.primary,
-                    title: Text(name),
-                    secondary: CircleAvatar(
-                      backgroundColor: AppTheme.primary,
-                      child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white)),
+                TextField(
+                  controller: _descCtrl,
+                  style: AppTheme.body(color: Colors.white),
+                  decoration: const InputDecoration(labelText: 'Description (optional)'),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(14)),
+                  child: SwitchListTile(
+                    activeColor: AppTheme.cyan,
+                    value: _isPublic,
+                    title: Text('Public group', style: AppTheme.body(color: Colors.white)),
+                    subtitle: Text(
+                      _isPublic ? 'Anyone can find and join this group' : 'Only people you add can join',
+                      style: AppTheme.body(size: 12, color: AppTheme.textSecondary),
                     ),
-                  );
-                }),
+                    onChanged: (v) => setState(() => _isPublic = v),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('ADD MEMBERS', style: AppTheme.body(size: 12, weight: FontWeight.w700, color: AppTheme.cyan)),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(14)),
+                  child: Column(
+                    children: _users.map((u) {
+                      final name = u.data['name'] ?? '';
+                      final selected = _selected.contains(u.$id);
+                      return CheckboxListTile(
+                        value: selected,
+                        onChanged: (v) => setState(() {
+                          if (v == true) {
+                            _selected.add(u.$id);
+                          } else {
+                            _selected.remove(u.$id);
+                          }
+                        }),
+                        activeColor: AppTheme.cyan,
+                        checkColor: AppTheme.bg,
+                        title: Text(name, style: AppTheme.body(color: Colors.white)),
+                        secondary: CircleAvatar(
+                          backgroundColor: AppTheme.surfaceLight,
+                          child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: AppTheme.heading(size: 14, color: Colors.white)),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
               ],
             ),
     );

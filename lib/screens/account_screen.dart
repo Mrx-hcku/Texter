@@ -90,12 +90,12 @@ class _AccountScreenState extends State<AccountScreen> {
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
-            child: const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: Text('Save', style: TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.cyan))
           : Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -106,30 +106,34 @@ class _AccountScreenState extends State<AccountScreen> {
                       onTap: _pickPhoto,
                       child: Stack(
                         children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundColor: AppTheme.primary,
-                            backgroundImage: _avatarUrl.isNotEmpty ? CachedNetworkImageProvider(_avatarUrl) : null,
-                            child: _avatarUrl.isEmpty
-                                ? Text(
-                                    _nameCtrl.text.isNotEmpty ? _nameCtrl.text[0].toUpperCase() : '?',
-                                    style: const TextStyle(fontSize: 36, color: Colors.white, fontWeight: FontWeight.bold),
-                                  )
-                                : null,
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: AppTheme.glowBorder(),
+                            child: CircleAvatar(
+                              radius: 50,
+                              backgroundColor: AppTheme.surfaceLight,
+                              backgroundImage: _avatarUrl.isNotEmpty ? CachedNetworkImageProvider(_avatarUrl) : null,
+                              child: _avatarUrl.isEmpty
+                                  ? Text(
+                                      _nameCtrl.text.isNotEmpty ? _nameCtrl.text[0].toUpperCase() : '?',
+                                      style: AppTheme.heading(size: 36, color: Colors.white),
+                                    )
+                                  : null,
+                            ),
                           ),
                           Positioned(
                             bottom: 0,
                             right: 0,
                             child: Container(
                               padding: const EdgeInsets.all(6),
-                              decoration: const BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle),
+                              decoration: const BoxDecoration(color: AppTheme.cyan, shape: BoxShape.circle),
                               child: _uploadingPhoto
-                                  ? const SizedBox(
+                                  ? SizedBox(
                                       height: 16,
                                       width: 16,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.bg),
                                     )
-                                  : const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+                                  : Icon(Icons.camera_alt, size: 16, color: AppTheme.bg),
                             ),
                           ),
                         ],
@@ -137,11 +141,19 @@ class _AccountScreenState extends State<AccountScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Full Name')),
+                  TextField(
+                    controller: _nameCtrl,
+                    style: AppTheme.body(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'Full Name'),
+                  ),
                   const SizedBox(height: 12),
-                  TextField(controller: _statusCtrl, decoration: const InputDecoration(labelText: 'Status / About')),
+                  TextField(
+                    controller: _statusCtrl,
+                    style: AppTheme.body(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'Status / About'),
+                  ),
                   const SizedBox(height: 12),
-                  Text('Email: $_email', style: TextStyle(color: Colors.grey.shade600)),
+                  Text('Email: $_email', style: AppTheme.body(color: AppTheme.textSecondary)),
                 ],
               ),
             ),

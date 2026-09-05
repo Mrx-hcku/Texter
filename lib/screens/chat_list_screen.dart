@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
+import 'package:intl/intl.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import 'one_to_one_chat_screen.dart';
@@ -60,150 +61,146 @@ class _ChatListScreenState extends State<ChatListScreen> {
     });
   }
 
+  Widget _storyAvatar(String name, {Color ring = AppTheme.cyan}) {
+    return Container(
+      margin: const EdgeInsets.only(right: 14),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: AppTheme.glowBorder(color: ring),
+            child: CircleAvatar(
+              radius: 24,
+              backgroundColor: AppTheme.surfaceLight,
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: AppTheme.heading(size: 16, color: Colors.white),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: 56,
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: AppTheme.body(size: 10, color: AppTheme.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatTime(models.Document c) {
+    final raw = c.$updatedAt;
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      return DateFormat('HH:mm').format(dt);
+    } catch (_) {
+      return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _chats.where((c) {
       final name = (c.data['chatName'] ?? '').toString().toLowerCase();
       return name.contains(_query.toLowerCase());
     }).toList();
+    final ringColors = [AppTheme.cyan, AppTheme.pink, AppTheme.cyan, AppTheme.pink];
 
     return Scaffold(
-      backgroundColor: const Color(0xFF05070B),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF05070B),
-        elevation: 0,
-        title: const Text(
-          'Texter',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-        ),
+        title: const Text('Texter'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_square, color: Color(0xFF00F0FF)),
-            onPressed: () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => const NewChatScreen()));
-              _load();
-            },
-          )
+          IconButton(icon: const Icon(Icons.search), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.edit_square), onPressed: () async {
+            await Navigator.push(context, MaterialPageRoute(builder: (_) => const NewChatScreen()));
+            _load();
+          }),
         ],
       ),
       body: RefreshIndicator(
-        color: const Color(0xFF00F0FF),
-        backgroundColor: const Color(0xFF0E131F),
         onRefresh: _load,
+        backgroundColor: AppTheme.surface,
+        color: AppTheme.cyan,
         child: Column(
           children: [
-            SizedBox(
-              height: 90,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: 6,
-                itemBuilder: (context, index) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: index == 0 ? const Color(0xFFFF007F) : const Color(0xFF00F0FF),
-                              width: 2,
-                            ),
-                          ),
-                          child: const CircleAvatar(
-                            radius: 24,
-                            backgroundColor: Color(0xFF1E222B),
-                            child: Icon(Icons.person, color: Colors.white70),
-                          ),
+            if (_chats.isNotEmpty)
+              SizedBox(
+                height: 92,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  itemCount: _chats.length > 10 ? 10 : _chats.length,
+                  itemBuilder: (context, i) {
+                    final c = _chats[i];
+                    return GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => OneToOneChatScreen(chatId: c.$id, chatName: c.data['chatName'] ?? ''),
                         ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Agent',
-                          style: TextStyle(color: Colors.white54, fontSize: 10),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                      ),
+                      child: _storyAvatar(c.data['chatName'] ?? '', ring: ringColors[i % ringColors.length]),
+                    );
+                  },
+                ),
               ),
-            ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: TextField(
                 onChanged: (v) => setState(() => _query = v),
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Search secure channels...',
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  prefixIcon: const Icon(Icons.search, color: Color(0xFF00F0FF)),
-                  filled: true,
-                  fillColor: const Color(0xFF0E131F),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
+                style: AppTheme.body(color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: 'Search',
+                  prefixIcon: Icon(Icons.search, color: AppTheme.textSecondary),
                 ),
               ),
             ),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF00F0FF)))
+                  ? const Center(child: CircularProgressIndicator(color: AppTheme.cyan))
                   : filtered.isEmpty
-                      ? const Center(child: Text('No secure chats yet', style: TextStyle(color: Colors.white54)))
+                      ? Center(child: Text('No chats yet', style: AppTheme.body(color: AppTheme.textSecondary)))
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           itemCount: filtered.length,
                           itemBuilder: (context, i) {
                             final c = filtered[i];
                             final name = c.data['chatName'] ?? '';
+                            final ring = ringColors[i % ringColors.length];
                             return Container(
-                              margin: const EdgeInsets.symmetric(vertical: 6),
+                              margin: const EdgeInsets.only(bottom: 10),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF0E131F),
+                                color: AppTheme.surface,
                                 borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: Colors.white10),
                               ),
                               child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                 leading: Container(
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: const Color(0xFF00F0FF), width: 1.5),
-                                  ),
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: AppTheme.glowBorder(color: ring),
                                   child: CircleAvatar(
-                                    radius: 24,
-                                    backgroundColor: const Color(0xFF1E222B),
-                                    child: Text(
-                                      name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                      style: const TextStyle(color: Color(0xFF00F0FF), fontWeight: FontWeight.bold),
-                                    ),
+                                    radius: 22,
+                                    backgroundColor: AppTheme.surfaceLight,
+                                    child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: AppTheme.heading(size: 15, color: Colors.white)),
                                   ),
                                 ),
-                                title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                                title: Text(name, style: AppTheme.body(size: 15, weight: FontWeight.w600, color: Colors.white)),
                                 subtitle: Text(
                                   c.data['lastMessage'] ?? '',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.white54, fontFamily: 'monospace'),
+                                  style: AppTheme.body(size: 12.5, color: AppTheme.textSecondary),
                                 ),
-                                trailing: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFF007F).withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Text(
-                                    'Active',
-                                    style: TextStyle(color: Color(0xFFFF007F), fontSize: 10, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
+                                trailing: Text(_formatTime(c), style: AppTheme.body(size: 11, color: AppTheme.textSecondary)),
                                 onTap: () => Navigator.push(
                                   context,
-                                  MaterialPageRoute(
-                                    builder: (_) => OneToOneChatScreen(chatId: c.$id, chatName: name),
-                                  ),
+                                  MaterialPageRoute(builder: (_) => OneToOneChatScreen(chatId: c.$id, chatName: name)),
                                 ),
                               ),
                             );
@@ -212,6 +209,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: AppTheme.pink,
+        onPressed: () async {
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const NewChatScreen()));
+          _load();
+        },
+        child: const Icon(Icons.chat_bubble, color: Colors.white),
       ),
     );
   }

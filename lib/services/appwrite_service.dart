@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import '../config/app_config.dart';
@@ -153,6 +154,27 @@ class AppwriteService {
     );
   }
 
+  Future<void> updateNotificationPrefs(String userId, Map<String, bool> prefs) {
+    return databases.updateDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.usersCollection,
+      documentId: userId,
+      data: {'notifPrefs': jsonEncode(prefs)},
+    );
+  }
+
+  Map<String, bool> parseNotificationPrefs(String? raw) {
+    const defaults = {'messages': true, 'groups': true, 'channels': true, 'sound': true};
+    if (raw == null || raw.isEmpty) return defaults;
+    try {
+      final decoded = Map<String, dynamic>.from(jsonDecode(raw));
+      return defaults.map((k, v) => MapEntry(k, decoded[k] ?? v));
+    } catch (_) {
+      return defaults;
+    }
+  }
+
+
   // ---------------- MESSAGES ----------------
   Future<List<models.Document>> getMessages(String chatId) async {
     final res = await databases.listDocuments(
@@ -186,6 +208,9 @@ class AppwriteService {
         'type': attachmentType.isNotEmpty ? attachmentType : 'text',
       },
     );
+    // Best-effort: only relevant for direct chats stored in the `chats`
+    // collection. Groups/channels use their own doc ID as chatId and
+    // don't have a matching `chats` document, so this must not fail send.
     try {
       await databases.updateDocument(
         databaseId: AppwriteConfig.databaseId,
@@ -212,6 +237,9 @@ class AppwriteService {
     return sub;
   }
 
+  /// Generic realtime listener for a whole collection — calls [onChange]
+  /// with the changed document and its Appwrite event list (e.g.
+  /// ["...documents.*.create"]) on every create/update/delete.
   RealtimeSubscription subscribeToCollection(
     String collectionId,
     void Function(models.Document doc, List<String> events) onChange,
@@ -234,29 +262,6 @@ class AppwriteService {
     return res.documents;
   }
 
-  Future<models.Document?> getGroupDoc(String groupId) async {
-    try {
-      return await databases.getDocument(
-        databaseId: AppwriteConfig.databaseId,
-        collectionId: AppwriteConfig.groupsCollection,
-        documentId: groupId,
-      );
-    } catch (e) {
-      return null;
-    }
-  }
-
-  Future<void> updateGroupPinnedMessage(String groupId, String pinnedMessage) async {
-    await databases.updateDocument(
-      databaseId: AppwriteConfig.databaseId,
-      collectionId: AppwriteConfig.groupsCollection,
-      documentId: groupId,
-      data: {
-        'pinnedMessage': pinnedMessage,
-      },
-    );
-  }
-
   Future<models.Document> createGroup({
     required String name,
     required String description,
@@ -275,7 +280,6 @@ class AppwriteService {
         'memberIds': memberIds,
         'adminIds': [creatorId],
         'isPublic': isPublic,
-        'pinnedMessage': '',
       },
     );
   }

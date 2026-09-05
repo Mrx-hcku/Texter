@@ -83,21 +83,25 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> with WidgetsBindi
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.mark_email_unread_outlined, size: 80, color: AppTheme.primary),
-              const SizedBox(height: 20),
-              const Text('Verify your Gmail', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: AppTheme.glowBorder(color: AppTheme.pink),
+                child: const Icon(Icons.mark_email_unread_outlined, size: 48, color: AppTheme.pink),
+              ),
+              const SizedBox(height: 24),
+              Text('VERIFY YOUR GMAIL', style: AppTheme.heading(size: 20)),
               const SizedBox(height: 10),
               Text(
                 "We sent a verification link to $_email. Open Gmail, tap the link — this screen will continue automatically once verified.",
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.black54),
+                style: AppTheme.body(color: AppTheme.textSecondary),
               ),
-              const SizedBox(height: 24),
-              const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+              const SizedBox(height: 28),
+              const CircularProgressIndicator(color: AppTheme.cyan, strokeWidth: 2),
               const SizedBox(height: 24),
               TextButton(
                 onPressed: _resending ? null : _resend,
-                child: Text(_resending ? 'Sending...' : 'Resend email'),
+                child: Text(_resending ? 'Sending...' : 'Resend email', style: const TextStyle(color: AppTheme.cyan)),
               ),
               TextButton(
                 onPressed: () async {
@@ -109,7 +113,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> with WidgetsBindi
                     (route) => false,
                   );
                 },
-                child: const Text('Use a different account'),
+                child: Text('Use a different account', style: AppTheme.body(color: AppTheme.textSecondary)),
               ),
             ],
           ),

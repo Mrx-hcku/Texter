@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import 'channels_screen.dart';
 
@@ -36,7 +37,7 @@ class _CreateChannelScreenState extends State<CreateChannelScreen> {
         actions: [
           TextButton(
             onPressed: _creating ? null : _create,
-            child: const Text('Create', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text('Create', style: TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -44,9 +45,17 @@ class _CreateChannelScreenState extends State<CreateChannelScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Channel Name')),
+            TextField(
+              controller: _nameCtrl,
+              style: AppTheme.body(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'Channel Name'),
+            ),
             const SizedBox(height: 12),
-            TextField(controller: _descCtrl, decoration: const InputDecoration(labelText: 'Description (optional)')),
+            TextField(
+              controller: _descCtrl,
+              style: AppTheme.body(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'Description (optional)'),
+            ),
           ],
         ),
       ),

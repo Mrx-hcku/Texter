@@ -106,12 +106,12 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(_channel?.name ?? 'Channel')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.cyan))
           : Column(
               children: [
                 Container(
                   width: double.infinity,
-                  color: Colors.white,
+                  color: AppTheme.surface,
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,17 +119,18 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
                       if ((_channel?.description ?? '').isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(_channel!.description, style: TextStyle(color: Colors.grey.shade700)),
+                          child: Text(_channel!.description, style: AppTheme.body(color: AppTheme.textSecondary)),
                         ),
                       Row(
                         children: [
-                          Text('${_channel?.subscriberCount ?? 0} subscribers', style: TextStyle(color: Colors.grey.shade600)),
+                          Text('${_channel?.subscriberCount ?? 0} subscribers', style: AppTheme.body(size: 12.5, color: AppTheme.textSecondary)),
                           const Spacer(),
                           ElevatedButton(
                             onPressed: _busy ? null : _toggleSubscribe,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _isSubscribed ? Colors.grey.shade300 : AppTheme.primary,
-                              foregroundColor: _isSubscribed ? Colors.black87 : Colors.white,
+                              backgroundColor: _isSubscribed ? AppTheme.surfaceLight : AppTheme.cyan,
+                              foregroundColor: _isSubscribed ? Colors.white : AppTheme.bg,
+                              minimumSize: const Size(120, 40),
                             ),
                             child: Text(_isSubscribed ? 'Subscribed' : 'Subscribe'),
                           ),
@@ -140,7 +141,7 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
                 ),
                 Expanded(
                   child: _posts.isEmpty
-                      ? const Center(child: Text('No posts yet'))
+                      ? Center(child: Text('No posts yet', style: AppTheme.body(color: AppTheme.textSecondary)))
                       : ListView.builder(
                           padding: const EdgeInsets.all(12),
                           itemCount: _posts.length,
@@ -150,27 +151,32 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
                               width: double.infinity,
                               margin: const EdgeInsets.symmetric(vertical: 6),
                               padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                              child: Text(p.text),
+                              decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(14)),
+                              child: Text(p.text, style: AppTheme.body(color: Colors.white)),
                             );
                           },
                         ),
                 ),
                 if (_isSubscribed)
                   SafeArea(
-                    child: Padding(
+                    child: Container(
+                      color: AppTheme.surface,
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                       child: Row(
                         children: [
                           Expanded(
                             child: TextField(
                               controller: _controller,
+                              style: AppTheme.body(color: Colors.white),
                               decoration: const InputDecoration(hintText: 'Post to channel'),
                             ),
                           ),
                           const SizedBox(width: 6),
-                          CircleAvatar(
-                            backgroundColor: AppTheme.primary,
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(colors: [AppTheme.cyan, AppTheme.pink]),
+                            ),
                             child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 20), onPressed: _post),
                           ),
                         ],
@@ -178,10 +184,10 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
                     ),
                   )
                 else
-                  const SafeArea(
+                  SafeArea(
                     child: Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text('Subscribe to post in this channel', style: TextStyle(color: Colors.grey)),
+                      padding: const EdgeInsets.all(12),
+                      child: Text('Subscribe to post in this channel', style: AppTheme.body(color: AppTheme.textSecondary)),
                     ),
                   ),
               ],

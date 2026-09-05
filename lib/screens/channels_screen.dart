@@ -59,29 +59,36 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
       feed.add(Container(
         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+        decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: AppTheme.primary,
-              child: Text(c.name.isNotEmpty ? c.name[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white)),
+            Container(
+              padding: const EdgeInsets.all(2),
+              decoration: AppTheme.glowBorder(color: AppTheme.pink),
+              child: CircleAvatar(
+                radius: 22,
+                backgroundColor: AppTheme.surfaceLight,
+                child: Text(c.name.isNotEmpty ? c.name[0].toUpperCase() : '?', style: AppTheme.heading(size: 15, color: Colors.white)),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(c.name, style: AppTheme.body(size: 15, weight: FontWeight.w600, color: Colors.white)),
                   const SizedBox(height: 2),
-                  Text('${c.subscriberCount} subscribers', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                  Text('${c.subscriberCount} subscribers', style: AppTheme.body(size: 12, color: AppTheme.textSecondary)),
                 ],
               ),
             ),
-            TextButton(onPressed: () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => ChannelViewScreen(channelId: c.id)));
-              _load();
-            }, child: const Text('View')),
+            TextButton(
+              onPressed: () async {
+                await Navigator.push(context, MaterialPageRoute(builder: (_) => ChannelViewScreen(channelId: c.id)));
+                _load();
+              },
+              child: const Text('View', style: TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w600)),
+            ),
           ],
         ),
       ));
@@ -99,10 +106,19 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
         })],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.cyan))
           : RefreshIndicator(
               onRefresh: _load,
-              child: ListView(padding: const EdgeInsets.all(12), children: feed),
+              backgroundColor: AppTheme.surface,
+              color: AppTheme.cyan,
+              child: feed.isEmpty
+                  ? ListView(children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 80),
+                        child: Center(child: Text('No channels yet', style: AppTheme.body(color: AppTheme.textSecondary))),
+                      ),
+                    ])
+                  : ListView(padding: const EdgeInsets.all(12), children: feed),
             ),
     );
   }
