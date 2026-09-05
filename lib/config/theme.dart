@@ -73,7 +73,7 @@ class AppTheme {
           hintStyle: GoogleFonts.inter(color: textSecondary, fontSize: 14),
           labelStyle: GoogleFonts.inter(color: textSecondary, fontSize: 13),
         ),
-        cardTheme: CardThemeData(
+        cardTheme: CardTheme(
           color: surface,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
