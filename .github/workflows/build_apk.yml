@@ -47,6 +47,9 @@ jobs:
         run: |
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/' android/app/build.gradle || true
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' android/app/build.gradle.kts || true
+          # Agar compileSdk line direct likhi ho to uske liye:
+          sed -i 's/compileSdkVersion [0-9][0-9]/compileSdkVersion 35/' android/app/build.gradle || true
+          sed -i 's/compileSdk = [0-9][0-9]/compileSdk = 35/' android/app/build.gradle.kts || true
 
       - name: Bump Kotlin Gradle plugin version (required by unity_ads_plugin)
         run: |
@@ -79,3 +82,4 @@ jobs:
         with:
           name: texter-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          
