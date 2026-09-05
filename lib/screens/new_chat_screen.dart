@@ -87,13 +87,9 @@ class _NewChatScreenState extends State<NewChatScreen> {
                             decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(14)),
                             child: ListTile(
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                              leading: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: AppTheme.glowBorder(),
-                                child: CircleAvatar(
-                                  backgroundColor: AppTheme.surfaceLight,
-                                  child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: AppTheme.heading(size: 14, color: Colors.white)),
-                                ),
+                              leading: CircleAvatar(
+                                backgroundColor: AppTheme.surfaceLight,
+                                child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: AppTheme.heading(size: 14, color: Colors.white70)),
                               ),
                               title: Text(name, style: AppTheme.body(color: Colors.white, weight: FontWeight.w600)),
                               subtitle: Text(u.data['email'] ?? '', style: AppTheme.body(size: 12, color: AppTheme.textSecondary)),

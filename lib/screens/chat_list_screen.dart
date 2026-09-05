@@ -61,35 +61,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
     });
   }
 
-  Widget _storyAvatar(String name, {Color ring = AppTheme.cyan}) {
-    return Container(
-      margin: const EdgeInsets.only(right: 14),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: AppTheme.glowBorder(color: ring),
-            child: CircleAvatar(
-              radius: 24,
-              backgroundColor: AppTheme.surfaceLight,
-              child: Text(
-                name.isNotEmpty ? name[0].toUpperCase() : '?',
-                style: AppTheme.heading(size: 16, color: Colors.white),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          SizedBox(
-            width: 56,
-            child: Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: AppTheme.body(size: 10, color: AppTheme.textSecondary),
-            ),
-          ),
-        ],
+  Widget _avatar(String name, {double radius = 22}) {
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: AppTheme.surfaceLight,
+      child: Text(
+        name.isNotEmpty ? name[0].toUpperCase() : '?',
+        style: AppTheme.heading(size: radius * 0.65, color: Colors.white70),
       ),
     );
   }
@@ -110,7 +88,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
       final name = (c.data['chatName'] ?? '').toString().toLowerCase();
       return name.contains(_query.toLowerCase());
     }).toList();
-    final ringColors = [AppTheme.cyan, AppTheme.pink, AppTheme.cyan, AppTheme.pink];
 
     return Scaffold(
       appBar: AppBar(
@@ -129,29 +106,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
         color: AppTheme.cyan,
         child: Column(
           children: [
-            if (_chats.isNotEmpty)
-              SizedBox(
-                height: 92,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: _chats.length > 10 ? 10 : _chats.length,
-                  itemBuilder: (context, i) {
-                    final c = _chats[i];
-                    return GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => OneToOneChatScreen(chatId: c.$id, chatName: c.data['chatName'] ?? ''),
-                        ),
-                      ),
-                      child: _storyAvatar(c.data['chatName'] ?? '', ring: ringColors[i % ringColors.length]),
-                    );
-                  },
-                ),
-              ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: TextField(
                 onChanged: (v) => setState(() => _query = v),
                 style: AppTheme.body(color: Colors.white),
@@ -172,7 +128,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           itemBuilder: (context, i) {
                             final c = filtered[i];
                             final name = c.data['chatName'] ?? '';
-                            final ring = ringColors[i % ringColors.length];
                             return Container(
                               margin: const EdgeInsets.only(bottom: 10),
                               decoration: BoxDecoration(
@@ -181,15 +136,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               ),
                               child: ListTile(
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                leading: Container(
-                                  padding: const EdgeInsets.all(2),
-                                  decoration: AppTheme.glowBorder(color: ring),
-                                  child: CircleAvatar(
-                                    radius: 22,
-                                    backgroundColor: AppTheme.surfaceLight,
-                                    child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: AppTheme.heading(size: 15, color: Colors.white)),
-                                  ),
-                                ),
+                                leading: _avatar(name),
                                 title: Text(name, style: AppTheme.body(size: 15, weight: FontWeight.w600, color: Colors.white)),
                                 subtitle: Text(
                                   c.data['lastMessage'] ?? '',

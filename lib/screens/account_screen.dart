@@ -106,20 +106,16 @@ class _AccountScreenState extends State<AccountScreen> {
                       onTap: _pickPhoto,
                       child: Stack(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: AppTheme.glowBorder(),
-                            child: CircleAvatar(
-                              radius: 50,
-                              backgroundColor: AppTheme.surfaceLight,
-                              backgroundImage: _avatarUrl.isNotEmpty ? CachedNetworkImageProvider(_avatarUrl) : null,
-                              child: _avatarUrl.isEmpty
-                                  ? Text(
-                                      _nameCtrl.text.isNotEmpty ? _nameCtrl.text[0].toUpperCase() : '?',
-                                      style: AppTheme.heading(size: 36, color: Colors.white),
-                                    )
-                                  : null,
-                            ),
+                          CircleAvatar(
+                            radius: 50,
+                            backgroundColor: AppTheme.surfaceLight,
+                            backgroundImage: _avatarUrl.isNotEmpty ? CachedNetworkImageProvider(_avatarUrl) : null,
+                            child: _avatarUrl.isEmpty
+                                ? Text(
+                                    _nameCtrl.text.isNotEmpty ? _nameCtrl.text[0].toUpperCase() : '?',
+                                    style: AppTheme.heading(size: 36, color: Colors.white70),
+                                  )
+                                : null,
                           ),
                           Positioned(
                             bottom: 0,

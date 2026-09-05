@@ -104,20 +104,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Center(
                   child: Column(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: AppTheme.glowBorder(),
-                        child: CircleAvatar(
-                          radius: 44,
-                          backgroundColor: AppTheme.surfaceLight,
-                          backgroundImage: _avatarUrl.isNotEmpty ? CachedNetworkImageProvider(_avatarUrl) : null,
-                          child: _avatarUrl.isEmpty
-                              ? Text(
-                                  _name.isNotEmpty ? _name[0].toUpperCase() : '?',
-                                  style: AppTheme.heading(size: 32, color: Colors.white),
-                                )
-                              : null,
-                        ),
+                      CircleAvatar(
+                        radius: 44,
+                        backgroundColor: AppTheme.surfaceLight,
+                        backgroundImage: _avatarUrl.isNotEmpty ? CachedNetworkImageProvider(_avatarUrl) : null,
+                        child: _avatarUrl.isEmpty
+                            ? Text(
+                                _name.isNotEmpty ? _name[0].toUpperCase() : '?',
+                                style: AppTheme.heading(size: 32, color: Colors.white70),
+                              )
+                            : null,
                       ),
                       const SizedBox(height: 12),
                       Text('@$_name', style: AppTheme.heading(size: 18)),

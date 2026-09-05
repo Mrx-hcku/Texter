@@ -62,14 +62,10 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
         decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(2),
-              decoration: AppTheme.glowBorder(color: AppTheme.pink),
-              child: CircleAvatar(
-                radius: 22,
-                backgroundColor: AppTheme.surfaceLight,
-                child: Text(c.name.isNotEmpty ? c.name[0].toUpperCase() : '?', style: AppTheme.heading(size: 15, color: Colors.white)),
-              ),
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: AppTheme.surfaceLight,
+              child: Text(c.name.isNotEmpty ? c.name[0].toUpperCase() : '?', style: AppTheme.heading(size: 15, color: Colors.white70)),
             ),
             const SizedBox(width: 12),
             Expanded(

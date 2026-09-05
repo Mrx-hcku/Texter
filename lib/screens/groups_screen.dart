@@ -79,14 +79,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
       decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
       child: ListTile(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        leading: Container(
-          padding: const EdgeInsets.all(2),
-          decoration: AppTheme.glowBorder(color: AppTheme.cyan),
-          child: CircleAvatar(
-            radius: 22,
-            backgroundColor: AppTheme.surfaceLight,
-            child: Text(g.name.isNotEmpty ? g.name[0].toUpperCase() : '?', style: AppTheme.heading(size: 15, color: Colors.white)),
-          ),
+        leading: CircleAvatar(
+          radius: 22,
+          backgroundColor: AppTheme.surfaceLight,
+          child: Text(g.name.isNotEmpty ? g.name[0].toUpperCase() : '?', style: AppTheme.heading(size: 15, color: Colors.white70)),
         ),
         title: Text(g.name, style: AppTheme.body(size: 15, weight: FontWeight.w600, color: Colors.white)),
         subtitle: Text(

@@ -189,6 +189,18 @@ class AppwriteService {
     return res.documents;
   }
 
+  Future<models.Document?> getMessageById(String messageId) async {
+    try {
+      return await databases.getDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.messagesCollection,
+        documentId: messageId,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<models.Document> sendMessage({
     required String chatId,
     required String senderId,
@@ -313,6 +325,36 @@ class AppwriteService {
       collectionId: AppwriteConfig.groupsCollection,
       documentId: groupId,
       data: {'memberIds': members},
+    );
+  }
+
+      data: {'memberIds': members},
+    );
+  }
+
+  Future<models.Document> getGroupDoc(String groupId) {
+    return databases.getDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.groupsCollection,
+      documentId: groupId,
+    );
+  }
+
+  Future<void> pinMessage({required String groupId, required String messageId}) {
+    return databases.updateDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.groupsCollection,
+      documentId: groupId,
+      data: {'pinnedMessageId': messageId},
+    );
+  }
+
+  Future<void> unpinMessage(String groupId) {
+    return databases.updateDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.groupsCollection,
+      documentId: groupId,
+      data: {'pinnedMessageId': ''},
     );
   }
 
