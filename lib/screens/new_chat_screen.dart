@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/models.dart' as models;
+import 'package:cached_network_image/cached_network_image.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import 'one_to_one_chat_screen.dart';
@@ -82,6 +83,8 @@ class _NewChatScreenState extends State<NewChatScreen> {
                         itemBuilder: (context, i) {
                           final u = _users[i];
                           final name = u.data['name'] ?? '';
+                          final avatarUrl = u.data['avatarUrl'] ?? '';
+                          final status = u.data['status'] ?? '';
                           return Container(
                             margin: const EdgeInsets.only(bottom: 8),
                             decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(14)),
@@ -89,10 +92,18 @@ class _NewChatScreenState extends State<NewChatScreen> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               leading: CircleAvatar(
                                 backgroundColor: AppTheme.surfaceLight,
-                                child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: AppTheme.heading(size: 14, color: Colors.white70)),
+                                backgroundImage: avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl) : null,
+                                child: avatarUrl.isEmpty
+                                    ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: AppTheme.heading(size: 14, color: Colors.white70))
+                                    : null,
                               ),
                               title: Text(name, style: AppTheme.body(color: Colors.white, weight: FontWeight.w600)),
-                              subtitle: Text(u.data['email'] ?? '', style: AppTheme.body(size: 12, color: AppTheme.textSecondary)),
+                              subtitle: Text(
+                                status.isNotEmpty ? status : (u.data['email'] ?? ''),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTheme.body(size: 12, color: AppTheme.textSecondary),
+                              ),
                               onTap: () => _startChat(u),
                             ),
                           );

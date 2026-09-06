@@ -174,7 +174,6 @@ class AppwriteService {
     }
   }
 
-
   // ---------------- MESSAGES ----------------
   Future<List<models.Document>> getMessages(String chatId) async {
     final res = await databases.listDocuments(
@@ -220,9 +219,6 @@ class AppwriteService {
         'type': attachmentType.isNotEmpty ? attachmentType : 'text',
       },
     );
-    // Best-effort: only relevant for direct chats stored in the `chats`
-    // collection. Groups/channels use their own doc ID as chatId and
-    // don't have a matching `chats` document, so this must not fail send.
     try {
       await databases.updateDocument(
         databaseId: AppwriteConfig.databaseId,
@@ -249,9 +245,6 @@ class AppwriteService {
     return sub;
   }
 
-  /// Generic realtime listener for a whole collection — calls [onChange]
-  /// with the changed document and its Appwrite event list (e.g.
-  /// ["...documents.*.create"]) on every create/update/delete.
   RealtimeSubscription subscribeToCollection(
     String collectionId,
     void Function(models.Document doc, List<String> events) onChange,
@@ -324,10 +317,6 @@ class AppwriteService {
       databaseId: AppwriteConfig.databaseId,
       collectionId: AppwriteConfig.groupsCollection,
       documentId: groupId,
-      data: {'memberIds': members},
-    );
-  }
-
       data: {'memberIds': members},
     );
   }

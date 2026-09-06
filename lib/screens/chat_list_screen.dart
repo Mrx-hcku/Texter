@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
@@ -20,6 +21,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   bool _loading = true;
   String? _myId;
   RealtimeSubscription? _sub;
+  final Map<String, String> _avatarCache = {};
 
   @override
   void initState() {
@@ -43,6 +45,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         _chats = chats;
         _loading = false;
       });
+      _fetchAvatars(chats);
     } catch (_) {
       setState(() => _loading = false);
     }
@@ -58,18 +61,21 @@ class _ChatListScreenState extends State<ChatListScreen> {
           _chats.insert(0, doc);
         }
       });
+      _fetchAvatars([doc]);
     });
   }
 
-  Widget _avatar(String name, {double radius = 22}) {
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: AppTheme.surfaceLight,
-      child: Text(
-        name.isNotEmpty ? name[0].toUpperCase() : '?',
-        style: AppTheme.heading(size: radius * 0.65, color: Colors.white70),
-      ),
-    );
+  Future<void> _fetchAvatars(List<models.Document> chats) async {
+    for (final c in chats) {
+      if (_avatarCache.containsKey(c.$id) || _myId == null) continue;
+      final ids = (c.data['participantIds'] as String? ?? '').split(',').where((e) => e.isNotEmpty).toList();
+      final otherId = ids.firstWhere((id) => id != _myId, orElse: () => '');
+      if (otherId.isEmpty) continue;
+      final doc = await AppwriteService.instance.getUserDoc(otherId);
+      final url = doc?.data['avatarUrl'] ?? '';
+      if (!mounted) return;
+      setState(() => _avatarCache[c.$id] = url);
+    }
   }
 
   String _formatTime(models.Document c) {
@@ -128,6 +134,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           itemBuilder: (context, i) {
                             final c = filtered[i];
                             final name = c.data['chatName'] ?? '';
+                            final avatarUrl = _avatarCache[c.$id] ?? '';
                             return Container(
                               margin: const EdgeInsets.only(bottom: 10),
                               decoration: BoxDecoration(
@@ -136,7 +143,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               ),
                               child: ListTile(
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                leading: _avatar(name),
+                                leading: CircleAvatar(
+                                  radius: 22,
+                                  backgroundColor: AppTheme.surfaceLight,
+                                  backgroundImage: avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl) : null,
+                                  child: avatarUrl.isEmpty
+                                      ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: AppTheme.heading(size: 15, color: Colors.white70))
+                                      : null,
+                                ),
                                 title: Text(name, style: AppTheme.body(size: 15, weight: FontWeight.w600, color: Colors.white)),
                                 subtitle: Text(
                                   c.data['lastMessage'] ?? '',
