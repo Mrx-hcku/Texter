@@ -6,7 +6,7 @@
 
 const ENDPOINT = "https://sgp.cloud.appwrite.io/v1";
 const PROJECT_ID = "6a8e7ddd00107e2b7857";
-const API_KEY = "standard_1cb837fff0e2f2dab01068a16778100a859e388788aa30b3c603f2c030050f93a94982763dc50b4badeacdcb6c800044f23e48712f0edb11819206107ca2aaff321e4de9265652ea737a013cb195592d96a483e642056d052e0f4c7f98801592eb53f969a26ff3a57d01ae7d08a04e736b1b7e21a1e05160f61110c984313041";
+const API_KEY = "YAHAN_APNI_API_KEY_DAALO";
 const DB_ID = "messgram_db";
 
 const headers = {
