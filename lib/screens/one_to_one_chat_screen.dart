@@ -8,6 +8,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
+import '../services/local_db_service.dart';
 import '../models/models.dart';
 
 class OneToOneChatScreen extends StatefulWidget {
@@ -46,14 +47,27 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
   Future<void> _init() async {
     final user = await AppwriteService.instance.getCurrentUser();
     _myId = user?.$id;
-    final docs = await AppwriteService.instance.getMessages(widget.chatId);
-    setState(() {
-      _messages = docs.map((d) => MessageModel.fromMap(d.data..addAll({'\$id': d.$id, '\$createdAt': d.$createdAt}))).toList();
-    });
+
+    // Show cached messages instantly (WhatsApp/Telegram-style)
+    final cached = await LocalDbService.instance.getCachedMessages(widget.chatId);
+    if (cached.isNotEmpty && mounted) {
+      setState(() => _messages = cached);
+    }
+
+    // Sync fresh data from server in the background
+    try {
+      final docs = await AppwriteService.instance.getMessages(widget.chatId);
+      final fresh = docs.map((d) => MessageModel.fromMap(d.data..addAll({'\$id': d.$id, '\$createdAt': d.$createdAt}))).toList();
+      await LocalDbService.instance.cacheMessages(widget.chatId, fresh);
+      if (mounted) setState(() => _messages = fresh);
+    } catch (_) {}
+
     _sub = AppwriteService.instance.subscribeToMessages(widget.chatId, (doc) {
       if (_messages.any((m) => m.id == doc.$id)) return;
       setState(() {
-        _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
+        final msg = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
+        _messages.add(msg);
+        LocalDbService.instance.cacheMessage(widget.chatId, msg);
       });
     });
   }
@@ -73,9 +87,9 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
     try {
       final doc = await AppwriteService.instance.sendMessage(chatId: widget.chatId, senderId: _myId!, text: text);
       if (!_messages.any((m) => m.id == doc.$id)) {
-        setState(() {
-          _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
-        });
+        final msg = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
+        setState(() => _messages.add(msg));
+        LocalDbService.instance.cacheMessage(widget.chatId, msg);
       }
     } catch (e) {
       if (!mounted) return;
@@ -96,9 +110,9 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
         attachmentType: type,
       );
       if (!_messages.any((m) => m.id == doc.$id)) {
-        setState(() {
-          _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
-        });
+        final msg = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
+        setState(() => _messages.add(msg));
+        LocalDbService.instance.cacheMessage(widget.chatId, msg);
       }
     } catch (e) {
       if (!mounted) return;

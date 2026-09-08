@@ -34,6 +34,7 @@ jobs:
         run: cp android_overrides/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
       - name: Set minSdkVersion for plugins (record_android/Unity Ads needs 23+)
+      - name: Set minSdkVersion for plugins (record package needs 23+)
         run: |
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/' android/app/build.gradle || true
           sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/' android/app/build.gradle || true
@@ -44,6 +45,7 @@ jobs:
           sed -i "/minSdkVersion 23/a\\        ndkVersion = \"25.1.8937393\"" android/app/build.gradle || true
           sed -i "/minSdk = 23/a\\        ndkVersion = \"25.1.8937393\"" android/app/build.gradle || true
           sed -i "/minSdk = 23/a\\        ndkVersion = \"25.1.8937393\"" android/app/build.gradle.kts || true
+          # Also replace if flutter.ndkVersion is already present as a line
           sed -i 's/ndkVersion = flutter.ndkVersion/ndkVersion = "25.1.8937393"/' android/app/build.gradle || true
           sed -i 's/ndkVersion = flutter.ndkVersion/ndkVersion = "25.1.8937393"/' android/app/build.gradle.kts || true
 

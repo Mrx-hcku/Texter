@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
+import '../services/local_db_service.dart';
 import '../models/models.dart';
 
 class ChannelViewScreen extends StatefulWidget {
@@ -38,6 +39,15 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
   Future<void> _init() async {
     final user = await AppwriteService.instance.getCurrentUser();
     _myId = user?.$id;
+    // Show cached posts instantly (WhatsApp/Telegram-style)
+    final cached = await LocalDbService.instance.getCachedMessages(widget.channelId);
+    if (cached.isNotEmpty && mounted) {
+      setState(() {
+        _posts = cached;
+        _loading = false;
+      });
+    }
+
     try {
       final doc = await AppwriteService.instance.databases.getDocument(
         databaseId: 'messgram_db',
@@ -45,11 +55,13 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
         documentId: widget.channelId,
       );
       final posts = await AppwriteService.instance.getMessages(widget.channelId);
+      final freshPosts = posts
+          .map((d) => MessageModel.fromMap(d.data..addAll({'\$id': d.$id, '\$createdAt': d.$createdAt})))
+          .toList();
+      await LocalDbService.instance.cacheMessages(widget.channelId, freshPosts);
       setState(() {
         _channel = ChannelModel.fromMap(doc.data..addAll({'\$id': doc.$id}));
-        _posts = posts
-            .map((d) => MessageModel.fromMap(d.data..addAll({'\$id': d.$id, '\$createdAt': d.$createdAt})))
-            .toList();
+        _posts = freshPosts;
         _loading = false;
       });
     } catch (e) {
@@ -60,9 +72,9 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
     _sub ??= AppwriteService.instance.subscribeToMessages(widget.channelId, (doc) {
       if (_posts.any((p) => p.id == doc.$id)) return;
       if (!mounted) return;
-      setState(() {
-        _posts.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
-      });
+      final msg = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
+      setState(() => _posts.add(msg));
+      LocalDbService.instance.cacheMessage(widget.channelId, msg);
     });
   }
 
@@ -91,9 +103,9 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
     try {
       final doc = await AppwriteService.instance.sendMessage(chatId: widget.channelId, senderId: _myId!, text: text);
       if (!_posts.any((p) => p.id == doc.$id)) {
-        setState(() {
-          _posts.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
-        });
+        final msg = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
+        setState(() => _posts.add(msg));
+        LocalDbService.instance.cacheMessage(widget.channelId, msg);
       }
     } catch (e) {
       if (!mounted) return;

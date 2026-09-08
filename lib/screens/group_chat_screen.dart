@@ -8,6 +8,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
+import '../services/local_db_service.dart';
 import '../services/ads_service.dart';
 import '../models/models.dart';
 import '../widgets/sponsored_ad_card.dart';
@@ -74,12 +75,23 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         }
       }
 
+      // Show cached messages instantly (WhatsApp/Telegram-style)
+      final cached = await LocalDbService.instance.getCachedMessages(widget.groupId);
+      if (cached.isNotEmpty && mounted) {
+        await _fetchSenderNames(cached);
+        setState(() {
+          _messages = cached;
+          _loading = false;
+        });
+      }
+
       final msgDocs = await AppwriteService.instance.getMessages(widget.groupId);
       final adDocs = await AppwriteService.instance.getAds(targetType: 'group');
       final messages = msgDocs
           .map((d) => MessageModel.fromMap(d.data..addAll({'\$id': d.$id, '\$createdAt': d.$createdAt})))
           .toList();
       await _fetchSenderNames(messages);
+      await LocalDbService.instance.cacheMessages(widget.groupId, messages);
       setState(() {
         _messages = messages;
         _ads = adDocs.map((d) => AdModel.fromMap(d.data..addAll({'\$id': d.$id}))).toList();
@@ -99,6 +111,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       }
       if (!mounted) return;
       setState(() => _messages.add(msg));
+      LocalDbService.instance.cacheMessage(widget.groupId, msg);
     });
   }
 
@@ -118,9 +131,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     try {
       final doc = await AppwriteService.instance.sendMessage(chatId: widget.groupId, senderId: _myId!, text: text);
       if (!_messages.any((m) => m.id == doc.$id)) {
-        setState(() {
-          _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
-        });
+        final msg = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
+        setState(() => _messages.add(msg));
+        LocalDbService.instance.cacheMessage(widget.groupId, msg);
       }
     } catch (e) {
       if (!mounted) return;
@@ -141,9 +154,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         attachmentType: type,
       );
       if (!_messages.any((m) => m.id == doc.$id)) {
-        setState(() {
-          _messages.add(MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt})));
-        });
+        final msg = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
+        setState(() => _messages.add(msg));
+        LocalDbService.instance.cacheMessage(widget.groupId, msg);
       }
     } catch (e) {
       if (!mounted) return;
