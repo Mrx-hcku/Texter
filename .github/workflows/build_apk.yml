@@ -33,7 +33,6 @@ jobs:
       - name: Apply custom AndroidManifest
         run: cp android_overrides/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
-      - name: Set minSdkVersion for plugins (record_android/Unity Ads needs 23+)
       - name: Set minSdkVersion for plugins (record package needs 23+)
         run: |
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/' android/app/build.gradle || true
