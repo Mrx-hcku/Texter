@@ -48,13 +48,11 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
     final user = await AppwriteService.instance.getCurrentUser();
     _myId = user?.$id;
 
-    // Show cached messages instantly (WhatsApp/Telegram-style)
     final cached = await LocalDbService.instance.getCachedMessages(widget.chatId);
     if (cached.isNotEmpty && mounted) {
       setState(() => _messages = cached);
     }
 
-    // Sync fresh data from server in the background
     try {
       final docs = await AppwriteService.instance.getMessages(widget.chatId);
       final fresh = docs.map((d) => MessageModel.fromMap(d.data..addAll({'\$id': d.$id, '\$createdAt': d.$createdAt}))).toList();
@@ -186,8 +184,13 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
     }
   }
 
-  Widget _attachIcon(IconData icon, VoidCallback onTap) {
-    return IconButton(icon: Icon(icon, color: AppTheme.textSecondary, size: 22), onPressed: _uploading ? null : onTap);
+  Widget _attachIcon(IconData icon, VoidCallback onTap, {Color? color}) {
+    return IconButton(
+      icon: Icon(icon, color: color ?? AppTheme.textSecondary, size: 22),
+      onPressed: _uploading ? null : onTap,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+    );
   }
 
   @override
@@ -218,11 +221,11 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: Icon(_playingId == m.id ? Icons.pause_circle : Icons.play_circle, color: mine ? AppTheme.bg : AppTheme.cyan, size: 30),
+                        icon: Icon(_playingId == m.id ? Icons.pause_circle : Icons.play_circle, color: mine ? Colors.white : AppTheme.cyan, size: 30),
                         onPressed: () => _togglePlay(m),
                         padding: EdgeInsets.zero,
                       ),
-                      Text(m.text.isNotEmpty ? m.text : 'Voice', style: TextStyle(color: mine ? AppTheme.bg : Colors.white)),
+                      Text(m.text.isNotEmpty ? m.text : 'Voice', style: const TextStyle(color: Colors.white)),
                     ],
                   );
                 } else if (m.attachmentType == 'file' && m.attachmentUrl.isNotEmpty) {
@@ -231,19 +234,19 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.insert_drive_file, color: mine ? AppTheme.bg : AppTheme.cyan),
+                        Icon(Icons.insert_drive_file, color: mine ? Colors.white70 : AppTheme.cyan),
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
                             m.text.isNotEmpty ? m.text : 'File',
-                            style: TextStyle(color: mine ? AppTheme.bg : Colors.white, decoration: TextDecoration.underline),
+                            style: const TextStyle(color: Colors.white, decoration: TextDecoration.underline),
                           ),
                         ),
                       ],
                     ),
                   );
                 } else {
-                  content = Text(m.text, style: TextStyle(color: mine ? AppTheme.bg : Colors.white));
+                  content = Text(m.text, style: const TextStyle(color: Colors.white));
                 }
                 return AnimatedAlign(
                   duration: const Duration(milliseconds: 200),
@@ -253,13 +256,14 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
                     decoration: BoxDecoration(
-                      color: mine ? AppTheme.cyan : AppTheme.surface,
+                      color: mine ? const Color(0xFF1E222B) : AppTheme.surface,
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(16),
                         topRight: const Radius.circular(16),
                         bottomLeft: Radius.circular(mine ? 16 : 4),
                         bottomRight: Radius.circular(mine ? 4 : 16),
                       ),
+                      border: Border.all(color: const Color(0xFF2A2E39), width: 1),
                     ),
                     child: content,
                   ),
@@ -274,7 +278,7 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
-                  const Icon(Icons.fiber_manual_record, color: AppTheme.pink, size: 14),
+                  const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
                   const SizedBox(width: 8),
                   Text(
                     '${_recordDuration.inMinutes}:${(_recordDuration.inSeconds % 60).toString().padLeft(2, '0')}',
@@ -288,28 +292,56 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
             ),
           SafeArea(
             child: Container(
-              color: AppTheme.surface,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              color: Colors.transparent,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               child: Row(
                 children: [
-                  _attachIcon(Icons.camera_alt_outlined, () => _pickImage(ImageSource.camera)),
-                  _attachIcon(Icons.photo_outlined, () => _pickImage(ImageSource.gallery)),
-                  _attachIcon(Icons.attach_file, _pickFile),
                   Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      style: AppTheme.body(color: Colors.white),
-                      decoration: const InputDecoration(hintText: 'Message', isDense: true),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E222B),
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      child: Row(
+                        children: [
+                          _attachIcon(Icons.camera_alt_outlined, () => _pickImage(ImageSource.camera)),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: TextField(
+                              controller: _controller,
+                              style: AppTheme.body(color: Colors.white),
+                              decoration: const InputDecoration(
+                                hintText: 'Message',
+                                hintStyle: TextStyle(color: Colors.grey),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(vertical: 10),
+                              ),
+                            ),
+                          ),
+                          _attachIcon(Icons.camera_alt, () => _pickImage(ImageSource.gallery)),
+                          _attachIcon(Icons.attach_file, _pickFile),
+                          _attachIcon(Icons.mic, _startRecording, color: const Color(0xFF00E5FF)),
+                        ],
+                      ),
                     ),
                   ),
-                  _attachIcon(Icons.mic_none, _startRecording),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 8),
                   Container(
+                    width: 46,
+                    height: 46,
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: LinearGradient(colors: [AppTheme.cyan, AppTheme.pink]),
+                      color: Color(0xFFE91E63),
                     ),
-                    child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 20), onPressed: _send),
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                      onPressed: _send,
+                      padding: EdgeInsets.zero,
+                    ),
                   ),
                 ],
               ),
