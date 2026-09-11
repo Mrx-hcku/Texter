@@ -89,4 +89,8 @@ class AppTheme {
         ),
         dividerColor: surfaceLight,
       );
+
+  // Aliases for ThemeNotifier compatibility in main.dart
+  static ThemeData get dayTheme => light;
+  static ThemeData get dark => light;
 }
