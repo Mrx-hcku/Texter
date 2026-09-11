@@ -70,6 +70,19 @@ class AppwriteService {
     return account.updateVerification(userId: userId, secret: secret);
   }
 
+  Future<void> updateOnlineStatus(String userId, bool isOnline) async {
+    try {
+      await databases.updateDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.usersCollection,
+        documentId: userId,
+        data: {
+          'online': isOnline,
+        },
+      );
+    } catch (_) {}
+  }
+
   // ---------------- CHATS ----------------
   Future<List<models.Document>> getChats(String userId) async {
     final res = await databases.listDocuments(
