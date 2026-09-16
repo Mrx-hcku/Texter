@@ -13,15 +13,10 @@ class AdsService {
         _initialized = true;
         UnityAds.load(placementId: UnityAdsConfig.interstitialPlacementId);
       },
-      onFailed: (error, message) {
-        // Ad SDK failed to init; app should still work without ads.
-      },
+      onFailed: (error, message) {},
     );
   }
 
-  /// Call this e.g. when a user opens a Group/Channel chat, to show a real
-  /// interstitial ad occasionally (in addition to the native "Sponsored"
-  /// content cards which are pulled from the Ads collection in Appwrite).
   static void showInterstitial() {
     if (!_initialized) return;
     UnityAds.showVideoAd(

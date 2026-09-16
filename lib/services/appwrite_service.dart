@@ -70,19 +70,6 @@ class AppwriteService {
     return account.updateVerification(userId: userId, secret: secret);
   }
 
-  Future<void> updateOnlineStatus(String userId, bool isOnline) async {
-    try {
-      await databases.updateDocument(
-        databaseId: AppwriteConfig.databaseId,
-        collectionId: AppwriteConfig.usersCollection,
-        documentId: userId,
-        data: {
-          'online': isOnline,
-        },
-      );
-    } catch (_) {}
-  }
-
   // ---------------- CHATS ----------------
   Future<List<models.Document>> getChats(String userId) async {
     final res = await databases.listDocuments(
@@ -112,8 +99,6 @@ class AppwriteService {
   }
 
   /// Finds an existing direct chat between two users, or creates one.
-  /// [otherName] is used only as the chat's display name if a new chat
-  /// document has to be created.
   Future<models.Document> findOrCreateDirectChat({
     required String myId,
     required String otherId,
@@ -127,6 +112,63 @@ class AppwriteService {
       }
     }
     return createChat(type: 'direct', name: otherName, participantIds: [myId, otherId]);
+  }
+
+  /// Marks a direct chat as read for [userId] — removes them from the
+  /// `unreadFor` list so the unread dot in the chat list disappears.
+  Future<void> markChatRead({required String chatId, required String userId}) async {
+    try {
+      final chatDoc = await databases.getDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.chatsCollection,
+        documentId: chatId,
+      );
+      final unread = (chatDoc.data['unreadFor'] as String? ?? '')
+          .split(',')
+          .where((e) => e.isNotEmpty && e != userId)
+          .toList();
+      await databases.updateDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.chatsCollection,
+        documentId: chatId,
+        data: {'unreadFor': unread.join(',')},
+      );
+    } catch (_) {}
+  }
+
+  // ---------------- PRESENCE / TYPING ----------------
+  Future<void> updateOnlineStatus(String userId, bool isOnline) async {
+    try {
+      await databases.updateDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.usersCollection,
+        documentId: userId,
+        data: {'online': isOnline},
+      );
+    } catch (_) {}
+  }
+
+  /// Adds/removes [userId] from a chat's `typingUsers` list so the other
+  /// participant sees a live "typing..." indicator.
+  Future<void> setTyping({required String chatId, required String userId, required bool isTyping}) async {
+    try {
+      final chatDoc = await databases.getDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.chatsCollection,
+        documentId: chatId,
+      );
+      final typing = (chatDoc.data['typingUsers'] as String? ?? '')
+          .split(',')
+          .where((e) => e.isNotEmpty && e != userId)
+          .toList();
+      if (isTyping) typing.add(userId);
+      await databases.updateDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.chatsCollection,
+        documentId: chatId,
+        data: {'typingUsers': typing.join(',')},
+      );
+    } catch (_) {}
   }
 
   // ---------------- USERS ----------------
@@ -233,12 +275,23 @@ class AppwriteService {
       },
     );
     try {
+      final chatDoc = await databases.getDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.chatsCollection,
+        documentId: chatId,
+      );
+      final participantIds = (chatDoc.data['participantIds'] as String? ?? '')
+          .split(',')
+          .where((e) => e.isNotEmpty)
+          .toList();
+      final recipients = participantIds.where((id) => id != senderId).toList();
       await databases.updateDocument(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.chatsCollection,
         documentId: chatId,
         data: {
           'lastMessage': text.isNotEmpty ? text : 'Attachment',
+          'unreadFor': recipients.join(','),
         },
       );
     } catch (_) {}

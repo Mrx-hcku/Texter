@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,10 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:photo_view/photo_view.dart';
-import 'package:photo_view/photo_view_gallery.dart';
-import 'package:video_player/video_player.dart';
-import 'package:chewie/chewie.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import '../services/local_db_service.dart';
@@ -39,6 +36,13 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
   final _player = AudioPlayer();
   String? _playingId;
 
+  String? _otherUserId;
+  bool _otherOnline = false;
+  bool _otherTyping = false;
+  RealtimeSubscription? _userSub;
+  RealtimeSubscription? _typingSub;
+  Timer? _typingDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +55,10 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
   Future<void> _init() async {
     final user = await AppwriteService.instance.getCurrentUser();
     _myId = user?.$id;
+
+    if (_myId != null) {
+      AppwriteService.instance.markChatRead(chatId: widget.chatId, userId: _myId!);
+    }
 
     final cached = await LocalDbService.instance.getCachedMessages(widget.chatId);
     if (cached.isNotEmpty && mounted) {
@@ -72,11 +80,58 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
         LocalDbService.instance.cacheMessage(widget.chatId, msg);
       });
     });
+
+    _resolveOtherUser();
+  }
+
+  Future<void> _resolveOtherUser() async {
+    try {
+      final chatDoc = await AppwriteService.instance.databases.getDocument(
+        databaseId: 'messgram_db',
+        collectionId: 'chats',
+        documentId: widget.chatId,
+      );
+      final ids = (chatDoc.data['participantIds'] as String? ?? '').split(',').where((e) => e.isNotEmpty).toList();
+      _otherUserId = ids.firstWhere((id) => id != _myId, orElse: () => '');
+      if (_otherUserId != null && _otherUserId!.isNotEmpty) {
+        final userDoc = await AppwriteService.instance.getUserDoc(_otherUserId!);
+        if (mounted) setState(() => _otherOnline = userDoc?.data['online'] ?? false);
+
+        _userSub = AppwriteService.instance.subscribeToCollection('users', (doc, events) {
+          if (doc.$id != _otherUserId) return;
+          if (!mounted) return;
+          setState(() => _otherOnline = doc.data['online'] ?? false);
+        });
+      }
+
+      _typingSub = AppwriteService.instance.subscribeToCollection('chats', (doc, events) {
+        if (doc.$id != widget.chatId) return;
+        final typingUsers = (doc.data['typingUsers'] as String? ?? '').split(',').where((e) => e.isNotEmpty).toList();
+        final isTyping = _otherUserId != null && typingUsers.contains(_otherUserId);
+        if (!mounted) return;
+        setState(() => _otherTyping = isTyping);
+      });
+    } catch (_) {}
+  }
+
+  void _onTextChanged(String value) {
+    if (_myId == null) return;
+    AppwriteService.instance.setTyping(chatId: widget.chatId, userId: _myId!, isTyping: value.isNotEmpty);
+    _typingDebounce?.cancel();
+    _typingDebounce = Timer(const Duration(seconds: 3), () {
+      AppwriteService.instance.setTyping(chatId: widget.chatId, userId: _myId!, isTyping: false);
+    });
   }
 
   @override
   void dispose() {
     _sub?.close();
+    _userSub?.close();
+    _typingSub?.close();
+    _typingDebounce?.cancel();
+    if (_myId != null) {
+      AppwriteService.instance.setTyping(chatId: widget.chatId, userId: _myId!, isTyping: false);
+    }
     _recorder.dispose();
     _player.dispose();
     super.dispose();
@@ -93,6 +148,8 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
         setState(() => _messages.add(msg));
         LocalDbService.instance.cacheMessage(widget.chatId, msg);
       }
+      _typingDebounce?.cancel();
+      AppwriteService.instance.setTyping(chatId: widget.chatId, userId: _myId!, isTyping: false);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send: $e')));
@@ -124,14 +181,11 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
     }
   }
 
-  Future<void> _pickImageOrVideo() async {
+  Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickMedia();
-    if (pickedFile == null) return;
-    final path = pickedFile.path;
-    final name = pickedFile.name;
-    final isVideo = path.endsWith('.mp4') || path.endsWith('.mov') || path.endsWith('.avi') || path.endsWith('.mkv');
-    await _sendMedia(path: path, fileName: name, type: isVideo ? 'video' : 'image');
+    final file = await picker.pickImage(source: source);
+    if (file == null) return;
+    await _sendMedia(path: file.path, fileName: file.name, type: 'image');
   }
 
   Future<void> _pickFile() async {
@@ -191,21 +245,6 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
     }
   }
 
-  void _openMediaViewer(MessageModel message) {
-    final mediaMessages = _messages.where((m) => m.attachmentType == 'image' || m.attachmentType == 'video').toList();
-    final initialIndex = mediaMessages.indexWhere((m) => m.id == message.id);
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => TelegramMediaViewer(
-          messages: mediaMessages,
-          initialIndex: initialIndex != -1 ? initialIndex : 0,
-        ),
-      ),
-    );
-  }
-
   Widget _attachIcon(IconData icon, VoidCallback onTap, {Color? color}) {
     return IconButton(
       icon: Icon(icon, color: color ?? AppTheme.textSecondary, size: 22),
@@ -219,7 +258,21 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.chatName),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(widget.chatName),
+            Text(
+              _otherTyping ? 'typing...' : (_otherOnline ? 'online' : 'offline'),
+              style: TextStyle(
+                fontSize: 12,
+                color: _otherTyping ? AppTheme.cyan : (_otherOnline ? Colors.greenAccent : AppTheme.textSecondary),
+                fontWeight: _otherTyping ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
         actions: [IconButton(icon: const Icon(Icons.more_vert), onPressed: () {})],
       ),
       body: Column(
@@ -234,53 +287,9 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                 final mine = m.senderId == _myId;
                 Widget content;
                 if (m.attachmentType == 'image' && m.attachmentUrl.isNotEmpty) {
-                  content = GestureDetector(
-                    onTap: () => _openMediaViewer(m),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        m.attachmentUrl,
-                        width: 220,
-                        height: 180,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return Container(
-                            width: 220,
-                            height: 180,
-                            color: Colors.black26,
-                            child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan)),
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                } else if (m.attachmentType == 'video' && m.attachmentUrl.isNotEmpty) {
-                  content = GestureDetector(
-                    onTap: () => _openMediaViewer(m),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        width: 220,
-                        height: 180,
-                        color: Colors.black54,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            const Icon(Icons.play_circle_filled, color: Colors.white, size: 54),
-                            Positioned(
-                              bottom: 8,
-                              left: 8,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(4)),
-                                child: const Text('Video', style: TextStyle(color: Colors.white, fontSize: 10)),
-                              ),
-                            )
-                          ],
-                        ),
-                      ),
-                    ),
+                  content = ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(m.attachmentUrl, width: 200, fit: BoxFit.cover),
                   );
                 } else if (m.attachmentType == 'voice' && m.attachmentUrl.isNotEmpty) {
                   content = Row(
@@ -371,11 +380,12 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       child: Row(
                         children: [
-                          _attachIcon(Icons.camera_alt_outlined, () => _pickImageOrVideo()),
+                          _attachIcon(Icons.camera_alt_outlined, () => _pickImage(ImageSource.camera)),
                           const SizedBox(width: 4),
                           Expanded(
                             child: TextField(
                               controller: _controller,
+                              onChanged: _onTextChanged,
                               style: AppTheme.body(color: Colors.white),
                               decoration: const InputDecoration(
                                 hintText: 'Message',
@@ -388,7 +398,7 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                               ),
                             ),
                           ),
-                          _attachIcon(Icons.perm_media, () => _pickImageOrVideo()),
+                          _attachIcon(Icons.camera_alt, () => _pickImage(ImageSource.gallery)),
                           _attachIcon(Icons.attach_file, _pickFile),
                           _attachIcon(Icons.mic, _startRecording, color: const Color(0xFF00E5FF)),
                         ],
@@ -414,141 +424,6 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// Telegram/WhatsApp Style Production-Grade Media Viewer Gallery
-class TelegramMediaViewer extends StatefulWidget {
-  final List<MessageModel> messages;
-  final int initialIndex;
-
-  const TelegramMediaViewer({super.key, required this.messages, required this.initialIndex});
-
-  @override
-  State<TelegramMediaViewer> createState() => _TelegramMediaViewerState();
-}
-
-class _TelegramMediaViewerState extends State<TelegramMediaViewer> {
-  late PageController _pageController;
-  late int _currentIndex;
-  bool _showUI = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentIndex = widget.initialIndex;
-    _pageController = PageController(initialPage: widget.initialIndex);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final currentMsg = widget.messages[_currentIndex];
-
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: GestureDetector(
-        onTap: () => setState(() => _showUI = !_showUI),
-        child: Stack(
-          children: [
-            PhotoViewGallery.builder(
-              scrollPhysics: const BouncingScrollPhysics(),
-              builder: (context, index) {
-                final msg = widget.messages[index];
-                if (msg.attachmentType == 'video') {
-                  return PhotoViewGalleryPageOptions.customChild(
-                    child: ChatVideoPlayer(url: msg.attachmentUrl),
-                    initialScale: PhotoViewComputedScale.contained,
-                    minScale: PhotoViewComputedScale.contained,
-                    maxScale: PhotoViewComputedScale.covered * 2,
-                  );
-                } else {
-                  return PhotoViewGalleryPageOptions(
-                    imageProvider: NetworkImage(msg.attachmentUrl),
-                    initialScale: PhotoViewComputedScale.contained,
-                    minScale: PhotoViewComputedScale.contained * 0.8,
-                    maxScale: PhotoViewComputedScale.covered * 3,
-                  );
-                }
-              },
-              itemCount: widget.messages.length,
-              pageController: _pageController,
-              onPageChanged: (index) => setState(() => _currentIndex = index),
-              backgroundDecoration: const BoxDecoration(color: Colors.black),
-            ),
-            if (_showUI)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: AnimatedOpacity(
-                  opacity: _showUI ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: AppBar(
-                    backgroundColor: Colors.black54,
-                    elevation: 0,
-                    title: Text('${_currentIndex + 1} of ${widget.messages.length}', style: const TextStyle(fontSize: 16)),
-                    iconTheme: const IconThemeData(color: Colors.white),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Integrated Chewie Video Player Widget for Smooth Streaming inside Viewer
-class ChatVideoPlayer extends StatefulWidget {
-  final String url;
-  const ChatVideoPlayer({super.key, required this.url});
-
-  @override
-  State<ChatVideoPlayer> createState() => _ChatVideoPlayerState();
-}
-
-class _ChatVideoPlayerState extends State<ChatVideoPlayer> {
-  late VideoPlayerController _videoPlayerController;
-  ChewieController? _chewieController;
-  bool _initialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _initVideo();
-  }
-
-  Future<void> _initVideo() async {
-    _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(widget.url));
-    await _videoPlayerController.initialize();
-    _chewieController = ChewieController(
-      videoPlayerController: _videoPlayerController,
-      autoPlay: true,
-      looping: false,
-      aspectRatio: _videoPlayerController.value.aspectRatio,
-      errorBuilder: (context, errorMessage) => Center(child: Text(errorMessage, style: const TextStyle(color: Colors.white))),
-    );
-    if (mounted) setState(() => _initialized = true);
-  }
-
-  @override
-  void dispose() {
-    _videoPlayerController.dispose();
-    _chewieController?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_initialized || _chewieController == null) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.cyan));
-    }
-    return Center(
-      child: AspectRatio(
-        aspectRatio: _videoPlayerController.value.aspectRatio,
-        child: Chewie(controller: _chewieController!),
       ),
     );
   }

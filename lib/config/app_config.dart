@@ -13,9 +13,7 @@ class AppwriteConfig {
 }
 
 class UnityAdsConfig {
-  // Replace with your real Unity Ads Game ID + placement IDs
-  // (Unity Dashboard -> Monetization -> your project)
   static const String androidGameId = "YOUR_UNITY_ANDROID_GAME_ID";
   static const String interstitialPlacementId = "Interstitial_Android";
-  static const bool testMode = true; // set false before release
+  static const bool testMode = true;
 }

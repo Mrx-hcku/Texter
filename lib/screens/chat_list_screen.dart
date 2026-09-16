@@ -5,7 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
-import '../services/local_db_service.dart'; // Local DB service imported
+import '../services/theme_notifier.dart';
 import 'one_to_one_chat_screen.dart';
 import 'new_chat_screen.dart';
 import 'privacy_screen.dart';
@@ -25,19 +25,26 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
   String? _myId;
   RealtimeSubscription? _sub;
   final Map<String, String> _avatarCache = {};
+  final Map<String, bool> _onlineCache = {};
+  final Map<String, String> _otherUserIdByChat = {};
+  RealtimeSubscription? _userSub;
 
+  // Selection Mode State (Telegram Style)
   final Set<String> _selectedChatIds = {};
   bool get _isSelectionMode => _selectedChatIds.isNotEmpty;
 
+  // Day/Night mode animation state
   bool _isDayMode = false;
   late AnimationController _animController;
 
   @override
   void initState() {
     super.initState();
+    _isDayMode = ThemeNotifier.isDay;
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
+      value: _isDayMode ? 1 : 0,
     );
     _load();
   }
@@ -45,6 +52,7 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
   @override
   void dispose() {
     _sub?.close();
+    _userSub?.close();
     _animController.dispose();
     super.dispose();
   }
@@ -53,35 +61,16 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
     final user = await AppwriteService.instance.getCurrentUser();
     if (user == null) return;
     _myId = user.$id;
-
-    // 1. Pehle Local DB se cached chats load karo taki instant UI dikhe
-    try {
-      final cachedChats = await LocalDbService.instance.getCachedChats(user.$id);
-      if (cachedChats.isNotEmpty && mounted) {
-        setState(() {
-          _chats = cachedChats;
-          _loading = false;
-        });
-        _fetchAvatars(cachedChats);
-      }
-    } catch (_) {}
-
-    // 2. Phir Backend se fresh chats fetch karke local DB mein update karo
     try {
       final chats = await AppwriteService.instance.getChats(user.$id);
-      if (mounted) {
-        setState(() {
-          _chats = chats;
-          _loading = false;
-        });
-      }
-      // Local DB mein chats cache kar lo
-      await LocalDbService.instance.cacheChats(chats);
+      setState(() {
+        _chats = chats;
+        _loading = false;
+      });
       _fetchAvatars(chats);
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      setState(() => _loading = false);
     }
-
     _sub ??= AppwriteService.instance.subscribeToCollection('chats', (doc, events) {
       final ids = (doc.data['participantIds'] as String? ?? '').split(',').where((e) => e.isNotEmpty).toList();
       if (_myId == null || !ids.contains(_myId)) return;
@@ -94,7 +83,6 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
           _chats.insert(0, doc);
         }
       });
-      LocalDbService.instance.cacheChat(doc);
       _fetchAvatars([doc]);
     });
   }
@@ -105,11 +93,24 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
       final ids = (c.data['participantIds'] as String? ?? '').split(',').where((e) => e.isNotEmpty).toList();
       final otherId = ids.firstWhere((id) => id != _myId, orElse: () => '');
       if (otherId.isEmpty) continue;
+      _otherUserIdByChat[c.$id] = otherId;
       final doc = await AppwriteService.instance.getUserDoc(otherId);
       final url = doc?.data['avatarUrl'] ?? '';
+      final online = doc?.data['online'] ?? false;
       if (!mounted) return;
-      setState(() => _avatarCache[c.$id] = url);
+      setState(() {
+        _avatarCache[c.$id] = url;
+        _onlineCache[c.$id] = online;
+      });
     }
+    _userSub ??= AppwriteService.instance.subscribeToCollection('users', (doc, events) {
+      final entry = _otherUserIdByChat.entries.firstWhere(
+        (e) => e.value == doc.$id,
+        orElse: () => const MapEntry('', ''),
+      );
+      if (entry.key.isEmpty || !mounted) return;
+      setState(() => _onlineCache[entry.key] = doc.data['online'] ?? false);
+    });
   }
 
   String _formatTime(models.Document c) {
@@ -142,15 +143,17 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
     );
   }
 
-  void _toggleDayNightMode() {
+  Future<void> _toggleDayNightMode() async {
+    await ThemeNotifier.toggle();
     setState(() {
-      _isDayMode = !_isDayMode;
+      _isDayMode = ThemeNotifier.isDay;
       if (_isDayMode) {
         _animController.forward();
       } else {
         _animController.reverse();
       }
     });
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(_isDayMode ? 'Switched to Day Mode' : 'Switched to Night Mode'),
@@ -299,7 +302,7 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
               ),
             ),
             Expanded(
-              child: _loading && _chats.isEmpty
+              child: _loading
                   ? const Center(child: CircularProgressIndicator(color: AppTheme.cyan))
                   : filtered.isEmpty
                       ? Center(
@@ -330,15 +333,9 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                             ],
                           ),
                         )
-                      : ListView.separated(
-                          padding: EdgeInsets.zero,
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
                           itemCount: filtered.length,
-                          separatorBuilder: (context, index) => const Divider(
-                            color: Color(0xFF1E222B),
-                            height: 1,
-                            indent: 76,
-                            endIndent: 16,
-                          ),
                           itemBuilder: (context, i) {
                             final c = filtered[i];
                             final name = c.data['chatName'] ?? '';
@@ -346,7 +343,10 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                             final isSelected = _selectedChatIds.contains(c.$id);
 
                             final bool isPinned = c.data['isPinned'] ?? false;
-                            final int unreadCount = c.data['unreadCount'] ?? 0;
+                            final unreadForList = (c.data['unreadFor'] as String? ?? '').split(',').where((e) => e.isNotEmpty).toList();
+                            final bool hasUnread = _myId != null && unreadForList.contains(_myId);
+                            final int unreadCount = hasUnread ? 1 : 0;
+                            final bool isOnline = _onlineCache[c.$id] == true;
 
                             return Dismissible(
                               key: Key(c.$id),
@@ -366,13 +366,21 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                               background: Container(
                                 alignment: Alignment.centerLeft,
                                 padding: const EdgeInsets.only(left: 20),
-                                color: AppTheme.cyan,
+                                margin: const EdgeInsets.only(bottom: 10),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.cyan,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
                                 child: const Icon(Icons.archive, color: Colors.black),
                               ),
                               secondaryBackground: Container(
                                 alignment: Alignment.centerRight,
                                 padding: const EdgeInsets.only(right: 20),
-                                color: Colors.redAccent,
+                                margin: const EdgeInsets.only(bottom: 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
                                 child: const Icon(Icons.delete, color: Colors.white),
                               ),
                               onDismissed: (direction) {
@@ -384,19 +392,51 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                                 );
                               },
                               child: Container(
-                                color: isSelected ? AppTheme.surfaceLight.withOpacity(0.5) : Colors.transparent,
+                                margin: const EdgeInsets.only(bottom: 10),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? AppTheme.surfaceLight.withOpacity(0.5) : AppTheme.surface,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
                                 child: ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                   leading: Stack(
                                     children: [
                                       CircleAvatar(
-                                        radius: 24,
+                                        radius: 22,
                                         backgroundColor: AppTheme.surfaceLight,
                                         backgroundImage: avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl) : null,
                                         child: avatarUrl.isEmpty
-                                            ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: AppTheme.heading(size: 16, color: Colors.white70))
+                                            ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: AppTheme.heading(size: 15, color: Colors.white70))
                                             : null,
                                       ),
+                                      if (isOnline)
+                                        Positioned(
+                                          top: 0,
+                                          right: 0,
+                                          child: Container(
+                                            width: 12,
+                                            height: 12,
+                                            decoration: BoxDecoration(
+                                              color: Colors.greenAccent,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: AppTheme.surface, width: 2),
+                                            ),
+                                          ),
+                                        ),
+                                      if (unreadCount > 0 && !isSelected)
+                                        Positioned(
+                                          bottom: 0,
+                                          right: 0,
+                                          child: Container(
+                                            width: 13,
+                                            height: 13,
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.cyan,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: AppTheme.surface, width: 2),
+                                            ),
+                                          ),
+                                        ),
                                       if (isSelected)
                                         Positioned(
                                           bottom: 0,
@@ -412,15 +452,12 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                                         ),
                                     ],
                                   ),
-                                  title: Text(name, style: AppTheme.body(size: 16, weight: FontWeight.w600, color: Colors.white)),
-                                  subtitle: Padding(
-                                    padding: const EdgeInsets.only(top: 3),
-                                    child: Text(
-                                      c.data['lastMessage'] ?? '',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppTheme.body(size: 13.5, color: AppTheme.textSecondary),
-                                    ),
+                                  title: Text(name, style: AppTheme.body(size: 15, weight: FontWeight.w600, color: Colors.white)),
+                                  subtitle: Text(
+                                    c.data['lastMessage'] ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTheme.body(size: 12.5, color: AppTheme.textSecondary),
                                   ),
                                   trailing: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -434,10 +471,10 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                                               padding: EdgeInsets.only(right: 4),
                                               child: Icon(Icons.push_pin, size: 12, color: AppTheme.textSecondary),
                                             ),
-                                          Text(_formatTime(c), style: AppTheme.body(size: 11.5, color: AppTheme.textSecondary)),
+                                          Text(_formatTime(c), style: AppTheme.body(size: 11, color: AppTheme.textSecondary)),
                                         ],
                                       ),
-                                      const SizedBox(height: 5),
+                                      const SizedBox(height: 4),
                                       if (unreadCount > 0)
                                         Container(
                                           padding: const EdgeInsets.all(6),
@@ -466,18 +503,9 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                                     if (_isSelectionMode) {
                                       _toggleSelect(c.$id);
                                     } else {
-                                      final ids = (c.data['participantIds'] as String? ?? '').split(',').where((e) => e.isNotEmpty).toList();
-                                      final otherId = ids.firstWhere((id) => id != _myId, orElse: () => '');
-                                      
                                       Navigator.push(
                                         context,
-                                        MaterialPageRoute(
-                                          builder: (_) => OneToOneChatScreen(
-                                            chatId: c.$id, 
-                                            chatName: name,
-                                            otherUserId: otherId,
-                                          ),
-                                        ),
+                                        MaterialPageRoute(builder: (_) => OneToOneChatScreen(chatId: c.$id, chatName: name)),
                                       );
                                     }
                                   },
