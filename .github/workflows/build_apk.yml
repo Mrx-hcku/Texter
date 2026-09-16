@@ -37,7 +37,7 @@ jobs:
         run: |
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/' android/app/build.gradle || true
           sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/' android/app/build.gradle || true
-          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/' android/app/build.gradle.kts || true
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdkVersion = 23/' android/app/build.gradle.kts || true
 
       - name: Set NDK version required by plugins
         run: |
@@ -71,11 +71,15 @@ jobs:
       - name: Bump Android Gradle Plugin version (Kotlin 2.1.0 needs AGP 7.3.1+)
         run: |
           sed -i "s/id \"com.android.application\" version \"[^\"]*\"/id \"com.android.application\" version \"8.3.0\"/" android/settings.gradle || true
-          sed -i "s/id(\"com.android.application\") version \"[^\"]*\"/id(\"com.android.application\") version \"8.3.0\"/" android/settings.gradle.kts || true
+          sed -i "s/id(\"com.android.application\") version \"[^\"]*\"/id(\"com.android.application\" version \"8.3.0\"/" android/settings.gradle.kts || true
           sed -i "s/distributionUrl=.*/distributionUrl=https\\\\:\\/\\/services.gradle.org\\/distributions\\/gradle-8.4-all.zip/" android/gradle/wrapper/gradle-wrapper.properties || true
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Fix Kotlin metadata mismatch for cached plugins
+        run: |
+          find "$HOME/.pub-cache" -name "*.kotlin_module" -delete || true
 
       - name: Patch plugin packages that use flutter.compileSdkVersion/minSdkVersion
         run: |
@@ -83,7 +87,7 @@ jobs:
             sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/' "$f" || true
             sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' "$f" || true
             sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/' "$f" || true
-            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/' "$f" || true
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdkVersion = 23/' "$f" || true
           done
 
       - name: Build APK (release)
