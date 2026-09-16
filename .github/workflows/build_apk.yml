@@ -32,36 +32,57 @@ jobs:
       - name: Apply custom AndroidManifest
         run: cp android_overrides/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
-      - name: Set minSdkVersion for plugins
+      - name: Set minSdkVersion and compileSdk in app/build.gradle.kts safely
         run: |
-          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/' android/app/build.gradle || true
-          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/' android/app/build.gradle || true
-          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/' android/app/build.gradle.kts || true
+          python3 -c '
+          import re
+          build_path = "android/app/build.gradle.kts"
+          with open(build_path, "r") as f:
+              content = f.read()
+          
+          # Set minSdk to 23
+          content = re.sub(r"minSdk\s*=\s*.*", "minSdk = 23", content)
+          content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
+          
+          # Set compileSdk to 35
+          content = re.sub(r"compileSdk\s*=\s*.*", "compileSdk = 35", content)
+          content = re.sub(r"compileSdkVersion\s+.*", "compileSdkVersion 35", content)
+          
+          # Set ndkVersion
+          if "ndkVersion" in content:
+              content = re.sub(r"ndkVersion\s*=.*", "ndkVersion = \"25.1.8937393\"", content)
+          else:
+              content = content.replace("defaultConfig {", "defaultConfig {\n        ndkVersion = \"25.1.8937393\"")
 
-      - name: Set NDK version required by plugins
-        run: |
-          sed -i "/minSdkVersion 23/a\\        ndkVersion = \"25.1.8937393\"" android/app/build.gradle || true
-          sed -i "/minSdk = 23/a\\        ndkVersion = \"25.1.8937393\"" android/app/build.gradle || true
-          sed -i "/minSdk = 23/a\\        ndkVersion = \"25.1.8937393\"" android/app/build.gradle.kts || true
-          sed -i 's/ndkVersion = flutter.ndkVersion/ndkVersion = "25.1.8937393"/' android/app/build.gradle || true
-          sed -i 's/ndkVersion = flutter.ndkVersion/ndkVersion = "25.1.8937393"/' android/app/build.gradle.kts || true
+          with open(build_path, "w") as f:
+              f.write(content)
+          print("Successfully updated app/build.gradle.kts")
+          '
 
-      - name: Bump compileSdk to 35
+      - name: Configure Kotlin and Gradle versions in settings.gradle.kts via Python
         run: |
-          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/' android/app/build.gradle || true
-          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' android/app/build.gradle || true
-          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' android/app/build.gradle.kts || true
+          python3 -c '
+          import re
+          settings_path = "android/settings.gradle.kts"
+          with open(settings_path, "r") as f:
+              content = f.read()
 
-      - name: Bump Kotlin Gradle plugin version to 2.1.0
-        run: |
-          sed -i "s/id \"org.jetbrains.kotlin.android\" version \"[^\"]*\"/id \"org.jetbrains.kotlin.android\" version \"2.1.0\"/" android/settings.gradle || true
-          sed -i "s/id(\"org.jetbrains.kotlin.android\") version \"[^\"]*\"/id(\"org.jetbrains.kotlin.android\") version \"2.1.0\"/" android/settings.gradle.kts || true
+          # Safely update AGP and Kotlin plugin versions for Kotlin DSL
+          content = re.sub(r"id\(\"com\.android\.application\"\)\s+version\s+\"[^\"]*\"", "id(\"com.android.application\") version \"8.3.0\"", content)
+          content = re.sub(r"id\(\"org\.jetbrains\.kotlin\.android\"\)\s+version\s+\"[^\"]*\"", "id(\"org.jetbrains.kotlin.android\") version \"2.1.0\"", content)
 
-      - name: Bump Android Gradle Plugin version
-        run: |
-          sed -i "s/id \"com.android.application\" version \"[^\"]*\"/id \"com.android.application\" version \"8.3.0\"/" android/settings.gradle || true
-          sed -i "s/id(\"com.android.application\") version \"[^\"]*\"/id(\"com.android.application\" version \"8.3.0\"/" android/settings.gradle.kts || true
-          sed -i "s/distributionUrl=.*/distributionUrl=https\\\\:\\/\\/services.gradle.org\\/distributions\\/gradle-8.4-all.zip/" android/gradle/wrapper/gradle-wrapper.properties || true
+          with open(settings_path, "w") as f:
+              f.write(content)
+
+          # Update gradle-wrapper.properties
+          prop_path = "android/gradle/wrapper/gradle-wrapper.properties"
+          with open(prop_path, "r") as f:
+              prop_content = f.read()
+          prop_content = re.sub(r"distributionUrl=.*", "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.4-all.zip", prop_content)
+          with open(prop_path, "w") as f:
+              f.write(prop_content)
+          print("Successfully updated settings.gradle.kts & gradle wrapper")
+          '
 
       - name: Get dependencies
         run: flutter pub get
@@ -70,13 +91,13 @@ jobs:
         run: |
           find "$HOME/.pub-cache" -name "*.kotlin_module" -delete || true
 
-      - name: Patch plugin packages for compileSdk
+      - name: Patch cached plugin packages for compileSdk/minSdk
         run: |
-          find "$HOME/.pub-cache" -path "*/android/build.gradle" 2>/dev/null | while read f; do
-            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/' "$f" || true
-            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' "$f" || true
-            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/' "$f" || true
-            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/' "$f" || true
+          find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/g' "$f" || true
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' "$f" || true
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/g' "$f" || true
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/g' "$f" || true
           done
 
       - name: Build APK (release)
