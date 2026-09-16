@@ -74,14 +74,14 @@ jobs:
           with open(settings_path, "w") as f:
               f.write(content)
 
-          # Update gradle-wrapper.properties
+          # Update gradle-wrapper.properties to Gradle 8.14
           prop_path = "android/gradle/wrapper/gradle-wrapper.properties"
           with open(prop_path, "r") as f:
               prop_content = f.read()
-          prop_content = re.sub(r"distributionUrl=.*", "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.4-all.zip", prop_content)
+          prop_content = re.sub(r"distributionUrl=.*", "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.14-all.zip", prop_content)
           with open(prop_path, "w") as f:
               f.write(prop_content)
-          print("Successfully updated settings.gradle.kts & gradle wrapper")
+          print("Successfully updated settings.gradle.kts & gradle wrapper to 8.14")
           '
 
       - name: Get dependencies
@@ -97,7 +97,7 @@ jobs:
             sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/g' "$f" || true
             sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' "$f" || true
             sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/g' "$f" || true
-            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/g' "$f" || true
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdkVersion 23/g' "$f" || true
           done
 
       - name: Build APK (release)
