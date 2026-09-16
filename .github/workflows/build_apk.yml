@@ -59,29 +59,17 @@ jobs:
           print("Successfully updated app/build.gradle.kts")
           '
 
-      - name: Configure Kotlin and Gradle versions in settings.gradle.kts via Python
+      - name: Update Gradle wrapper to 8.14 (Required by latest Flutter)
         run: |
           python3 -c '
           import re
-          settings_path = "android/settings.gradle.kts"
-          with open(settings_path, "r") as f:
-              content = f.read()
-
-          # Safely update AGP and Kotlin plugin versions for Kotlin DSL
-          content = re.sub(r"id\(\"com\.android\.application\"\)\s+version\s+\"[^\"]*\"", "id(\"com.android.application\") version \"8.3.0\"", content)
-          content = re.sub(r"id\(\"org\.jetbrains\.kotlin\.android\"\)\s+version\s+\"[^\"]*\"", "id(\"org.jetbrains.kotlin.android\") version \"2.1.0\"", content)
-
-          with open(settings_path, "w") as f:
-              f.write(content)
-
-          # Update gradle-wrapper.properties to Gradle 8.14
           prop_path = "android/gradle/wrapper/gradle-wrapper.properties"
           with open(prop_path, "r") as f:
               prop_content = f.read()
           prop_content = re.sub(r"distributionUrl=.*", "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.14-all.zip", prop_content)
           with open(prop_path, "w") as f:
               f.write(prop_content)
-          print("Successfully updated settings.gradle.kts & gradle wrapper to 8.14")
+          print("Successfully updated gradle wrapper to 8.14")
           '
 
       - name: Get dependencies
