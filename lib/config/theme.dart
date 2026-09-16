@@ -80,7 +80,7 @@ class AppTheme {
           hintStyle: GoogleFonts.inter(color: textSecondary, fontSize: 14),
           labelStyle: GoogleFonts.inter(color: textSecondary, fontSize: 13),
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           color: surface,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -146,7 +146,7 @@ class AppTheme {
           hintStyle: GoogleFonts.inter(color: dayTextSecondary, fontSize: 14),
           labelStyle: GoogleFonts.inter(color: dayTextSecondary, fontSize: 13),
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           color: daySurface,
           elevation: 1,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
