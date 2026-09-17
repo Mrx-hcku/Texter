@@ -71,6 +71,56 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Patch unity_ads_plugin (remove broken legacy v1-embedding code)
+        run: |
+          python3 -c '
+          import os, re
+          root = os.path.expanduser("~/.pub-cache/hosted/pub.dev")
+          target = None
+          if os.path.isdir(root):
+              for name in os.listdir(root):
+                  if name.startswith("unity_ads_plugin-"):
+                      target = os.path.join(root, name)
+                      break
+          if target:
+              kt_path = os.path.join(target, "android", "src", "main", "kotlin", "com", "rebeloid", "unity_ads", "UnityAdsPlugin.kt")
+              if os.path.exists(kt_path):
+                  with open(kt_path, "r") as f:
+                      content = f.read()
+
+                  starts = [m.start() for m in re.finditer(r"\bclass\s+UnityAdsPlugin\b", content)]
+                  if len(starts) >= 2:
+                      first_start = starts[0]
+                      brace_open = content.index("{", first_start)
+                      depth = 0
+                      i = brace_open
+                      while i < len(content):
+                          if content[i] == "{":
+                              depth += 1
+                          elif content[i] == "}":
+                              depth -= 1
+                              if depth == 0:
+                                  break
+                          i += 1
+                      content = content[:first_start] + content[i+1:]
+                      print("Removed duplicate legacy UnityAdsPlugin class block")
+
+                  content = re.sub(
+                      r"fun\s+registerWith\s*\(\s*registrar\s*:\s*Registrar\s*\)\s*\{[^{}]*\}",
+                      "",
+                      content
+                  )
+                  content = re.sub(r"import[^\n]*\.Registrar\s*\n", "", content)
+
+                  with open(kt_path, "w") as f:
+                      f.write(content)
+                  print(f"Patched: {kt_path}")
+              else:
+                  print("UnityAdsPlugin.kt not found at expected path — skipping")
+          else:
+              print("unity_ads_plugin not found in pub-cache — skipping")
+          '
+
       - name: Clear old Kotlin modules to prevent cache metadata mismatch
         run: |
           find "$HOME/.pub-cache" -name "*.kotlin_module" -delete || true
