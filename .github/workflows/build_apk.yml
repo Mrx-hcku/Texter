@@ -44,15 +44,15 @@ jobs:
           content = re.sub(r"minSdk\s*=\s*.*", "minSdk = 23", content)
           content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
           
-          # Set compileSdk to 35
-          content = re.sub(r"compileSdk\s*=\s*.*", "compileSdk = 35", content)
-          content = re.sub(r"compileSdkVersion\s+.*", "compileSdkVersion 35", content)
+          # Set compileSdk to 36
+          content = re.sub(r"compileSdk\s*=\s*.*", "compileSdk = 36", content)
+          content = re.sub(r"compileSdkVersion\s+.*", "compileSdkVersion 36", content)
           
           # Set ndkVersion
           if "ndkVersion" in content:
-              content = re.sub(r"ndkVersion\s*=.*", "ndkVersion = \"25.1.8937393\"", content)
+              content = re.sub(r"ndkVersion\s*=.*", "ndkVersion = \"28.2.13676358\"", content)
           else:
-              content = content.replace("defaultConfig {", "defaultConfig {\n        ndkVersion = \"25.1.8937393\"")
+              content = content.replace("defaultConfig {", "defaultConfig {\n        ndkVersion = \"28.2.13676358\"")
 
           with open(build_path, "w") as f:
               f.write(content)
@@ -82,8 +82,8 @@ jobs:
       - name: Patch cached plugin packages for compileSdk/minSdk
         run: |
           find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
-            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/g' "$f" || true
-            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' "$f" || true
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$f" || true
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$f" || true
             sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/g' "$f" || true
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/g' "$f" || true
           done
@@ -96,4 +96,3 @@ jobs:
         with:
           name: texter-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
-          
