@@ -78,6 +78,12 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Check for outdated/incompatible packages
+        run: flutter pub outdated || true
+
+      - name: Static analysis (catch code-level errors early)
+        run: flutter analyze || true
+
       - name: Clear old Kotlin modules to prevent cache metadata mismatch
         run: |
           find "$HOME/.pub-cache" -name "*.kotlin_module" -delete || true
@@ -91,8 +97,16 @@ jobs:
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/g' "$f" || true
           done
 
+      - name: Fix JVM target mismatch across plugins
+        run: |
+          find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
+            sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' "$f" || true
+            sed -i "s/jvmTarget = '1.8'/jvmTarget = '17'/g" "$f" || true
+            sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' "$f" || true
+          done
+
       - name: Build APK (release)
-        run: flutter build apk --release
+        run: flutter build apk --release --verbose
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
