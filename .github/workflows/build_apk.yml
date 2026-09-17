@@ -39,24 +39,56 @@ jobs:
           build_path = "android/app/build.gradle.kts"
           with open(build_path, "r") as f:
               content = f.read()
-          
-          # Set minSdk to 23
           content = re.sub(r"minSdk\s*=\s*.*", "minSdk = 23", content)
           content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
-          
-          # Set compileSdk to 36
           content = re.sub(r"compileSdk\s*=\s*.*", "compileSdk = 36", content)
           content = re.sub(r"compileSdkVersion\s+.*", "compileSdkVersion 36", content)
-          
-          # Set ndkVersion
           if "ndkVersion" in content:
               content = re.sub(r"ndkVersion\s*=.*", "ndkVersion = \"28.2.13676358\"", content)
           else:
               content = content.replace("defaultConfig {", "defaultConfig {\n        ndkVersion = \"28.2.13676358\"")
-
           with open(build_path, "w") as f:
               f.write(content)
           print("Successfully updated app/build.gradle.kts")
+          '
+
+      - name: Force compileSdk/JVM target across ALL Android modules (root build.gradle.kts)
+        run: |
+          python3 -c '
+          root_path = "android/build.gradle.kts"
+          with open(root_path, "r") as f:
+              content = f.read()
+
+          patch = """
+
+          subprojects {
+              afterEvaluate {
+                  val androidExt = project.extensions.findByName("android")
+                  if (androidExt is com.android.build.gradle.BaseExtension) {
+                      androidExt.compileSdkVersion(36)
+                      if (androidExt.ndkVersion.isNullOrEmpty()) {
+                          androidExt.ndkVersion = "28.2.13676358"
+                      }
+                  }
+              }
+              tasks.withType<JavaCompile>().configureAll {
+                  sourceCompatibility = JavaVersion.VERSION_17.toString()
+                  targetCompatibility = JavaVersion.VERSION_17.toString()
+              }
+              tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureAll {
+                  kotlinOptions {
+                      jvmTarget = "17"
+                  }
+              }
+          }
+          """
+
+          if "GLOBAL_JVM_PATCH" not in content:
+              content += "\n// GLOBAL_JVM_PATCH\n" + patch
+
+          with open(root_path, "w") as f:
+              f.write(content)
+          print("Patched root build.gradle.kts")
           '
 
       - name: Update Gradle wrapper to 9.3.1 (Required by latest Flutter AGP)
@@ -77,33 +109,6 @@ jobs:
 
       - name: Get dependencies
         run: flutter pub get
-
-      - name: Check for outdated/incompatible packages
-        run: flutter pub outdated || true
-
-      - name: Static analysis (catch code-level errors early)
-        run: flutter analyze || true
-
-      - name: Clear old Kotlin modules to prevent cache metadata mismatch
-        run: |
-          find "$HOME/.pub-cache" -name "*.kotlin_module" -delete || true
-
-      - name: Patch cached plugin packages for compileSdk/minSdk
-        run: |
-          find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
-            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$f" || true
-            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$f" || true
-            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/g' "$f" || true
-            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/g' "$f" || true
-          done
-
-      - name: Fix JVM target mismatch across plugins
-        run: |
-          find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
-            sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' "$f" || true
-            sed -i "s/jvmTarget = '1.8'/jvmTarget = '17'/g" "$f" || true
-            sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' "$f" || true
-          done
 
       - name: Build APK (release)
         run: flutter build apk --release --verbose
