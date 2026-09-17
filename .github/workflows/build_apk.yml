@@ -52,42 +52,6 @@ jobs:
           print("Successfully updated app/build.gradle.kts")
           '
 
-      - name: Force compileSdk/JVM target across ALL Android modules (root build.gradle.kts)
-        run: |
-          python3 -c '
-          root_path = "android/build.gradle.kts"
-          with open(root_path, "r") as f:
-              content = f.read()
-          patch = """
-
-          subprojects {
-              afterEvaluate {
-                  val androidExt = project.extensions.findByName("android")
-                  if (androidExt is com.android.build.gradle.BaseExtension) {
-                      androidExt.compileSdkVersion(36)
-                      if (androidExt.ndkVersion.isNullOrEmpty()) {
-                          androidExt.ndkVersion = "28.2.13676358"
-                      }
-                  }
-              }
-              tasks.withType<JavaCompile>().configureAll {
-                  sourceCompatibility = JavaVersion.VERSION_17.toString()
-                  targetCompatibility = JavaVersion.VERSION_17.toString()
-              }
-              tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureAll {
-                  kotlinOptions {
-                      jvmTarget = "17"
-                  }
-              }
-          }
-          """
-          if "GLOBAL_JVM_PATCH" not in content:
-              content += "\n// GLOBAL_JVM_PATCH\n" + patch
-          with open(root_path, "w") as f:
-              f.write(content)
-          print("Patched root build.gradle.kts")
-          '
-
       - name: Update Gradle wrapper to 9.3.1 (Required by latest Flutter AGP)
         run: |
           python3 -c '
@@ -106,6 +70,27 @@ jobs:
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Clear old Kotlin modules to prevent cache metadata mismatch
+        run: |
+          find "$HOME/.pub-cache" -name "*.kotlin_module" -delete || true
+
+      - name: Patch cached plugin packages for compileSdk/minSdk
+        run: |
+          find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$f" || true
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$f" || true
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/g' "$f" || true
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/g' "$f" || true
+          done
+
+      - name: Fix JVM target mismatch across plugins
+        run: |
+          find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
+            sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' "$f" || true
+            sed -i "s/jvmTarget = '1.8'/jvmTarget = '17'/g" "$f" || true
+            sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' "$f" || true
+          done
 
       - name: Auto-inject missing namespace in old plugins (AGP 9 requirement)
         run: |
