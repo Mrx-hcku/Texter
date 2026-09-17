@@ -58,7 +58,6 @@ jobs:
           root_path = "android/build.gradle.kts"
           with open(root_path, "r") as f:
               content = f.read()
-
           patch = """
 
           subprojects {
@@ -82,10 +81,8 @@ jobs:
               }
           }
           """
-
           if "GLOBAL_JVM_PATCH" not in content:
               content += "\n// GLOBAL_JVM_PATCH\n" + patch
-
           with open(root_path, "w") as f:
               f.write(content)
           print("Patched root build.gradle.kts")
@@ -110,10 +107,52 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Auto-inject missing namespace in old plugins (AGP 9 requirement)
+        run: |
+          python3 -c '
+          import re, os
+          root = os.path.expanduser("~/.pub-cache")
+          for dirpath, _, files in os.walk(root):
+              for fname in ("build.gradle", "build.gradle.kts"):
+                  if fname not in files:
+                      continue
+                  fpath = os.path.join(dirpath, fname)
+                  with open(fpath, "r", errors="ignore") as f:
+                      content = f.read()
+                  if "namespace" in content or ("android {" not in content and "android{" not in content):
+                      continue
+                  manifest = os.path.join(dirpath, "src", "main", "AndroidManifest.xml")
+                  pkg = None
+                  if os.path.exists(manifest):
+                      with open(manifest, "r", errors="ignore") as mf:
+                          m = re.search(r"package=\"([^\"]+)\"", mf.read())
+                          if m:
+                              pkg = m.group(1)
+                  if not pkg:
+                      continue
+                  if fname == "build.gradle.kts":
+                      content = re.sub(r"android\s*\{", f"android {{\n    namespace = \"{pkg}\"", content, count=1)
+                  else:
+                      content = re.sub(r"android\s*\{", f"android {{\n    namespace \"{pkg}\"", content, count=1)
+                  with open(fpath, "w") as f:
+                      f.write(content)
+                  print(f"Injected namespace into {fpath}")
+          '
+
       - name: Build APK (release)
-        run: flutter build apk --release --verbose
+        id: build
+        run: flutter build apk --release 2>&1 | tee build_log.txt
+        continue-on-error: true
+
+      - name: Print only the actual error (if build failed)
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "===== ERROR SUMMARY ====="
+          grep -E "error:|Error:|FAILURE|Exception|e: file" build_log.txt | sort -u || echo "No specific error line matched — check full log."
+          exit 1
 
       - name: Upload APK artifact
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: texter-release-apk
