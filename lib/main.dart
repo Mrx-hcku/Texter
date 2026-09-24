@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'config/theme.dart';
 import 'services/appwrite_service.dart';
 import 'services/ads_service.dart';
