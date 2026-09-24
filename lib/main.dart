@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'config/theme.dart';
 import 'services/appwrite_service.dart';
@@ -9,21 +10,65 @@ import 'screens/verify_email_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  try {
-    await ThemeNotifier.load();
-  } catch (e) {
-    debugPrint("Theme load error: $e");
-  }
 
-  // Yahan try-catch aur safety check add kar diya hai taki placeholder ID se app crash na ho
-  try {
-    await AdsService.init();
-  } catch (e) {
-    debugPrint("Ads init error: $e");
-  }
+  // 1. UI / Framework errors ko pakad kar screen par dikhane ke liye
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.dumpErrorToConsole(details);
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Center(
+              child: SingleChildScrollView(
+                child: Text(
+                  'CRASH ERROR (UI):\n${details.exception}\n\nStack Trace:\n${details.stack}',
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  };
 
-  runApp(const TexterApp());
+  // 2. Asynchronous / Background errors ko pakad kar screen par dikhane ke liye
+  runZonedGuarded(() async {
+    try {
+      await ThemeNotifier.load();
+    } catch (e) {
+      debugPrint("Theme load error: $e");
+    }
+
+    try {
+      await AdsService.init();
+    } catch (e) {
+      debugPrint("Ads init error: $e");
+    }
+
+    runApp(const TexterApp());
+  }, (error, stack) {
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Center(
+              child: SingleChildScrollView(
+                child: Text(
+                  'CRASH ERROR (Async):\n$error\n\nStack Trace:\n$stack',
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  });
 }
 
 class TexterApp extends StatefulWidget {
@@ -54,9 +99,13 @@ class _TexterAppState extends State<TexterApp> with WidgetsBindingObserver {
   }
 
   Future<void> _setOnline(bool online) async {
-    final user = await AppwriteService.instance.getCurrentUser();
-    if (user != null) {
-      AppwriteService.instance.updateOnlineStatus(user.$id, online);
+    try {
+      final user = await AppwriteService.instance.getCurrentUser();
+      if (user != null) {
+        AppwriteService.instance.updateOnlineStatus(user.$id, online);
+      }
+    } catch (e) {
+      debugPrint("Online status error: $e");
     }
   }
 
@@ -87,8 +136,29 @@ class _AuthGate extends StatelessWidget {
       future: AppwriteService.instance.getCurrentUser(),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
+        
+        // Agar FutureBuilder ke andar koi error aaye toh use bhi screen par dikhayein
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: Colors.black,
+            body: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Center(
+                child: SingleChildScrollView(
+                  child: Text(
+                    'AuthGate Error:\n${snapshot.error}',
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
         final user = snapshot.data;
         if (user == null) return const LoginScreen();
         if (!user.emailVerification) return const VerifyEmailScreen();
