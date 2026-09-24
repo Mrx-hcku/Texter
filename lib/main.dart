@@ -10,7 +10,7 @@ import 'screens/verify_email_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  GoogleFonts.config.allowRuntimeFetching = false;
+  // GoogleFonts wali line yahan se hata di gayi hai
 
   // 1. UI / Framework errors ko pakad kar screen par dikhane ke liye
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -87,7 +87,7 @@ class _TexterAppState extends State<TexterApp> with WidgetsBindingObserver {
     _setOnline(true);
   }
 
-  @override
+    @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _setOnline(false);
