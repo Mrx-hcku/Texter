@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'config/theme.dart';
 import 'services/appwrite_service.dart';
 import 'services/ads_service.dart';
@@ -10,6 +11,7 @@ import 'screens/verify_email_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   // 1. UI / Framework errors ko pakad kar screen par dikhane ke liye
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -140,7 +142,7 @@ class _AuthGate extends StatelessWidget {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        
+
         // Agar FutureBuilder ke andar koi error aaye toh use bhi screen par dikhayein
         if (snapshot.hasError) {
           return Scaffold(
