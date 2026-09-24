@@ -10,7 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
   appwrite: ^13.0.0
-  google_fonts: ^6.2.1
   image_picker: ^1.1.2
   provider: ^6.1.2
   intl: ^0.19.0
@@ -36,3 +35,4 @@ flutter:
 
 dependency_overrides:
   flutter_web_auth_2: ^4.1.0
+  
