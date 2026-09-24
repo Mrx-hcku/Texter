@@ -32,6 +32,9 @@ jobs:
       - name: Apply custom AndroidManifest
         run: cp android_overrides/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
+      - name: Apply custom MainActivity (crash logger)
+        run: cp android_overrides/MainActivity.kt android/app/src/main/kotlin/com/texter/texter/MainActivity.kt
+
       - name: Set minSdkVersion and compileSdk in app/build.gradle.kts safely
         run: |
           python3 -c '
