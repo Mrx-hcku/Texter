@@ -17,8 +17,15 @@ import java.util.Locale
 class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        writeMarker("onCreate STARTED")
         setupCrashHandler()
-        super.onCreate(savedInstanceState)
+        try {
+            super.onCreate(savedInstanceState)
+            writeMarker("super.onCreate COMPLETED")
+        } catch (throwable: Throwable) {
+            writeCrashLog(throwable)
+            throw throwable
+        }
     }
 
     private fun setupCrashHandler() {
@@ -32,12 +39,19 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun writeMarker(msg: String) {
+        val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
+        writeToFile("\n[$timestamp] $msg\n")
+    }
+
     private fun writeCrashLog(throwable: Throwable) {
         val sw = StringWriter()
         throwable.printStackTrace(PrintWriter(sw))
         val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
-        val text = "\n===== CRASH at $timestamp =====\n$sw\n"
+        writeToFile("\n===== CRASH at $timestamp =====\n$sw\n")
+    }
 
+    private fun writeToFile(text: String) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val resolver = applicationContext.contentResolver
@@ -62,14 +76,18 @@ class MainActivity : FlutterActivity() {
             }
         } catch (e: Exception) {
         }
-
-        val fallbackDir = getExternalFilesDir(null) ?: filesDir
-        File(fallbackDir, "crash_log.txt").appendText(text)
+        try {
+            val fallbackDir = getExternalFilesDir(null) ?: filesDir
+            File(fallbackDir, "crash_log.txt").appendText(text)
+        } catch (e: Exception) {
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        writeMarker("configureFlutterEngine STARTED")
         try {
             super.configureFlutterEngine(flutterEngine)
+            writeMarker("configureFlutterEngine COMPLETED")
         } catch (throwable: Throwable) {
             writeCrashLog(throwable)
             throw throwable
