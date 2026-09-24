@@ -35,6 +35,12 @@ jobs:
       - name: Apply custom MainActivity (crash logger)
         run: cp android_overrides/MainActivity.kt android/app/src/main/kotlin/com/texter/texter/MainActivity.kt
 
+      - name: Apply custom Application class (early crash logger + on-screen error)
+        run: cp android_overrides/MyApplication.kt android/app/src/main/kotlin/com/texter/texter/MyApplication.kt
+
+      - name: Apply custom ErrorActivity (on-screen crash display)
+        run: cp android_overrides/ErrorActivity.kt android/app/src/main/kotlin/com/texter/texter/ErrorActivity.kt
+
       - name: Set minSdkVersion and compileSdk in app/build.gradle.kts safely
         run: |
           python3 -c '
