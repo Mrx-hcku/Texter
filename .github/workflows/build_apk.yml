@@ -61,6 +61,25 @@ jobs:
           print("Successfully updated app/build.gradle.kts")
           '
 
+      - name: Exclude WorkManager (root cause of WorkDatabase crash)
+        run: |
+          python3 -c '
+          build_path = "android/app/build.gradle.kts"
+          with open(build_path, "r") as f:
+              content = f.read()
+          exclusion = """
+          configurations.all {
+              exclude(group = "androidx.work", module = "work-runtime")
+              exclude(group = "androidx.work", module = "work-runtime-ktx")
+          }
+          """
+          if "androidx.work" not in content:
+              content += "\n" + exclusion
+          with open(build_path, "w") as f:
+              f.write(content)
+          print("Excluded androidx.work from build.gradle.kts")
+          '
+
       - name: Update Gradle wrapper to 9.3.1 (Required by latest Flutter AGP)
         run: |
           python3 -c '
@@ -79,6 +98,10 @@ jobs:
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Show which plugin brings in WorkManager
+        run: |
+          find "$HOME/.pub-cache" -path "*/android/build.gradle*" -exec grep -l "androidx.work" {} \; 2>/dev/null || echo "No plugin directly references androidx.work in build.gradle"
 
       - name: Clear old Kotlin modules to prevent cache metadata mismatch
         run: |
