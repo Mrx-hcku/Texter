@@ -19,14 +19,11 @@ class MyApplication : Application() {
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
         setupCrashHandler()
-        writeMarker("attachBaseContext")
     }
 
     override fun onCreate() {
         try {
-            writeMarker("Application.onCreate STARTED")
             super.onCreate()
-            writeMarker("Application.onCreate COMPLETED")
         } catch (t: Throwable) {
             handleCrash(t)
         }
@@ -57,24 +54,27 @@ class MyApplication : Application() {
         }
     }
 
-    private fun writeMarker(msg: String) {
-        val ts = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
-        writeToFile("\n[$ts] $msg\n")
-    }
-
     private fun writeCrashLog(t: Throwable) {
         val sw = StringWriter()
         t.printStackTrace(PrintWriter(sw))
         val ts = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
-        writeToFile("\n===== CRASH at $ts =====\n$sw\n")
+        writeToFile("===== CRASH at $ts =====\n$sw\n")
     }
 
     private fun writeToFile(text: String) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val resolver = applicationContext.contentResolver
+                val displayName = "texter_crash_log.txt"
+
+                resolver.delete(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    "${MediaStore.Downloads.DISPLAY_NAME} = ?",
+                    arrayOf(displayName)
+                )
+
                 val values = ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, "texter_crash_log.txt")
+                    put(MediaStore.Downloads.DISPLAY_NAME, displayName)
                     put(MediaStore.Downloads.MIME_TYPE, "text/plain")
                     put(MediaStore.Downloads.IS_PENDING, 1)
                 }
@@ -89,14 +89,14 @@ class MyApplication : Application() {
             } else {
                 val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 val logFile = File(downloadsDir, "texter_crash_log.txt")
-                logFile.appendText(text)
+                logFile.writeText(text)
                 return
             }
         } catch (e: Exception) {
         }
         try {
             val fallbackDir = getExternalFilesDir(null) ?: filesDir
-            File(fallbackDir, "crash_log.txt").appendText(text)
+            File(fallbackDir, "crash_log.txt").writeText(text)
         } catch (e: Exception) {
         }
     }
