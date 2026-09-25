@@ -17,11 +17,9 @@ import java.util.Locale
 class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        writeMarker("onCreate STARTED")
         setupCrashHandler()
         try {
             super.onCreate(savedInstanceState)
-            writeMarker("super.onCreate COMPLETED")
         } catch (throwable: Throwable) {
             writeCrashLog(throwable)
             throw throwable
@@ -39,24 +37,29 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun writeMarker(msg: String) {
-        val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
-        writeToFile("\n[$timestamp] $msg\n")
-    }
-
     private fun writeCrashLog(throwable: Throwable) {
         val sw = StringWriter()
         throwable.printStackTrace(PrintWriter(sw))
         val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
-        writeToFile("\n===== CRASH at $timestamp =====\n$sw\n")
+        writeToFile("===== CRASH at $timestamp =====\n$sw\n")
     }
 
     private fun writeToFile(text: String) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val resolver = applicationContext.contentResolver
+                val displayName = "texter_crash_log.txt"
+
+                // Purani copies (texter_crash_log.txt, (1).txt, (2).txt, ...) delete karo
+                // taaki sirf ek hi, latest file rahe.
+                resolver.delete(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    "${MediaStore.Downloads.DISPLAY_NAME} = ?",
+                    arrayOf(displayName)
+                )
+
                 val values = ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, "texter_crash_log.txt")
+                    put(MediaStore.Downloads.DISPLAY_NAME, displayName)
                     put(MediaStore.Downloads.MIME_TYPE, "text/plain")
                     put(MediaStore.Downloads.IS_PENDING, 1)
                 }
@@ -71,23 +74,21 @@ class MainActivity : FlutterActivity() {
             } else {
                 val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 val logFile = File(downloadsDir, "texter_crash_log.txt")
-                logFile.appendText(text)
+                logFile.writeText(text)
                 return
             }
         } catch (e: Exception) {
         }
         try {
             val fallbackDir = getExternalFilesDir(null) ?: filesDir
-            File(fallbackDir, "crash_log.txt").appendText(text)
+            File(fallbackDir, "crash_log.txt").writeText(text)
         } catch (e: Exception) {
         }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        writeMarker("configureFlutterEngine STARTED")
         try {
             super.configureFlutterEngine(flutterEngine)
-            writeMarker("configureFlutterEngine COMPLETED")
         } catch (throwable: Throwable) {
             writeCrashLog(throwable)
             throw throwable
