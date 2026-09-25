@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'config/theme.dart';
 import 'services/appwrite_service.dart';
 import 'services/ads_service.dart';
@@ -8,13 +9,30 @@ import 'screens/login_screen.dart';
 import 'screens/main_nav_screen.dart';
 import 'screens/verify_email_screen.dart';
 
+/// Errors jo humein pata hain harmless/background hain (third-party SDK bugs),
+/// inhe silently ignore karte hain taaki app crash-screen pe na atke.
+/// Naya aisa error milte hi bas ek line yahan add kar dena.
+bool _isKnownHarmlessError(String message) {
+  const knownPatterns = [
+    'RealtimeResponse',           // Appwrite realtime "pong" heartbeat parse bug
+    'Map<dynamic, dynamic>',      // same bug, alternate message shape
+    'Failed to load font',        // google_fonts network fetch failure (offline)
+    'fonts.gstatic.com',          // same, alternate message shape
+  ];
+  return knownPatterns.any((p) => message.contains(p));
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // GoogleFonts wali line yahan se hata di gayi hai
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   // 1. UI / Framework errors ko pakad kar screen par dikhane ke liye
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.dumpErrorToConsole(details);
+    if (_isKnownHarmlessError(details.exception.toString())) {
+      debugPrint('Ignored known harmless UI error: ${details.exception}');
+      return;
+    }
     runApp(
       MaterialApp(
         home: Scaffold(
@@ -51,6 +69,10 @@ void main() async {
 
     runApp(const TexterApp());
   }, (error, stack) {
+    if (_isKnownHarmlessError(error.toString())) {
+      debugPrint('Ignored known harmless async error: $error');
+      return;
+    }
     runApp(
       MaterialApp(
         home: Scaffold(
@@ -87,7 +109,7 @@ class _TexterAppState extends State<TexterApp> with WidgetsBindingObserver {
     _setOnline(true);
   }
 
-    @override
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _setOnline(false);
@@ -142,7 +164,6 @@ class _AuthGate extends StatelessWidget {
           );
         }
 
-        // Agar FutureBuilder ke andar koi error aaye toh use bhi screen par dikhayein
         if (snapshot.hasError) {
           return Scaffold(
             backgroundColor: Colors.black,
