@@ -149,6 +149,7 @@ class ChannelModel {
   final String name;
   final String description;
   final String avatarUrl;
+  final String creatorId;
   final int subscriberCount;
   final List<String> subscriberIds;
 
@@ -157,6 +158,7 @@ class ChannelModel {
     required this.name,
     this.description = '',
     this.avatarUrl = '',
+    this.creatorId = '',
     this.subscriberCount = 0,
     this.subscriberIds = const [],
   });
@@ -166,9 +168,19 @@ class ChannelModel {
         name: map['name'] ?? '',
         description: map['description'] ?? '',
         avatarUrl: map['avatarUrl'] ?? '',
+        creatorId: map['creatorId'] ?? '',
         subscriberCount: map['subscriberCount'] ?? 0,
         subscriberIds: List<String>.from(map['subscriberIds'] ?? []),
       );
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'description': description,
+        'avatarUrl': avatarUrl,
+        'creatorId': creatorId,
+        'subscriberCount': subscriberCount,
+        'subscriberIds': subscriberIds,
+      };
 }
 
 class AdModel {
