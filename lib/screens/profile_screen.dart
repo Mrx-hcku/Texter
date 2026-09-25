@@ -32,10 +32,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _load() async {
     final user = await AppwriteService.instance.getCurrentUser();
     if (user == null) return;
-    setState(() {
-      _name = user.name;
-      _email = user.email;
-    });
+    if (mounted) {
+      setState(() {
+        _name = user.name;
+        _email = user.email;
+      });
+    }
     try {
       final doc = await AppwriteService.instance.getUserDoc(user.$id);
       final groups = await AppwriteService.instance.getGroups();
@@ -107,13 +109,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       CircleAvatar(
                         radius: 44,
                         backgroundColor: AppTheme.surfaceLight,
-                        backgroundImage: _avatarUrl.isNotEmpty ? CachedNetworkImageProvider(_avatarUrl) : null,
-                        child: _avatarUrl.isEmpty
-                            ? Text(
-                                _name.isNotEmpty ? _name[0].toUpperCase() : '?',
-                                style: AppTheme.heading(size: 32, color: Colors.white70),
-                              )
-                            : null,
+                        child: ClipOval(
+                          child: _avatarUrl.isNotEmpty
+                              ? CachedNetworkImage(
+                                  imageUrl: _avatarUrl,
+                                  width: 88,
+                                  height: 88,
+                                  fit: BoxFit.cover,
+                                  errorWidget: (context, url, error) => Text(
+                                    _name.isNotEmpty ? _name[0].toUpperCase() : '?',
+                                    style: AppTheme.heading(size: 32, color: Colors.white70),
+                                  ),
+                                )
+                              : Text(
+                                  _name.isNotEmpty ? _name[0].toUpperCase() : '?',
+                                  style: AppTheme.heading(size: 32, color: Colors.white70),
+                                ),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Text('@$_name', style: AppTheme.heading(size: 18)),
