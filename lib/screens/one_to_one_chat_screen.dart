@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
 import '../services/local_db_service.dart';
@@ -74,6 +75,7 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
 
     _sub = AppwriteService.instance.subscribeToMessages(widget.chatId, (doc) {
       if (_messages.any((m) => m.id == doc.$id)) return;
+      if (!mounted) return;
       setState(() {
         final msg = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
         _messages.add(msg);
@@ -145,7 +147,9 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
       final doc = await AppwriteService.instance.sendMessage(chatId: widget.chatId, senderId: _myId!, text: text);
       if (!_messages.any((m) => m.id == doc.$id)) {
         final msg = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
-        setState(() => _messages.add(msg));
+        if (mounted) {
+          setState(() => _messages.add(msg));
+        }
         LocalDbService.instance.cacheMessage(widget.chatId, msg);
       }
       _typingDebounce?.cancel();
@@ -170,7 +174,9 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
       );
       if (!_messages.any((m) => m.id == doc.$id)) {
         final msg = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
-        setState(() => _messages.add(msg));
+        if (mounted) {
+          setState(() => _messages.add(msg));
+        }
         LocalDbService.instance.cacheMessage(widget.chatId, msg);
       }
     } catch (e) {
@@ -230,10 +236,10 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
   Future<void> _togglePlay(MessageModel m) async {
     if (_playingId == m.id) {
       await _player.pause();
-      setState(() => _playingId = null);
+      if (mounted) setState(() => _playingId = null);
     } else {
       await _player.play(UrlSource(m.attachmentUrl));
-      setState(() => _playingId = m.id);
+      if (mounted) setState(() => _playingId = m.id);
     }
   }
 
@@ -289,7 +295,28 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                 if (m.attachmentType == 'image' && m.attachmentUrl.isNotEmpty) {
                   content = ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.network(m.attachmentUrl, width: 200, fit: BoxFit.cover),
+                    child: CachedNetworkImage(
+                      imageUrl: m.attachmentUrl,
+                      width: 200,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        height: 150,
+                        color: AppTheme.surfaceLight,
+                        child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan)),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        padding: const EdgeInsets.all(12),
+                        color: AppTheme.surfaceLight,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.broken_image, color: AppTheme.textSecondary),
+                            SizedBox(width: 8),
+                            Text('Image not found', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ),
                   );
                 } else if (m.attachmentType == 'voice' && m.attachmentUrl.isNotEmpty) {
                   content = Row(
