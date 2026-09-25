@@ -39,7 +39,6 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
   Future<void> _init() async {
     final user = await AppwriteService.instance.getCurrentUser();
     _myId = user?.$id;
-    // Show cached posts instantly (WhatsApp/Telegram-style)
     final cached = await LocalDbService.instance.getCachedMessages(widget.channelId);
     if (cached.isNotEmpty && mounted) {
       setState(() {
@@ -59,16 +58,41 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
           .map((d) => MessageModel.fromMap(d.data..addAll({'\$id': d.$id, '\$createdAt': d.$createdAt})))
           .toList();
       await LocalDbService.instance.cacheMessages(widget.channelId, freshPosts);
-      setState(() {
-        _channel = ChannelModel.fromMap(doc.data..addAll({'\$id': doc.$id}));
-        _posts = freshPosts;
-        _loading = false;
-      });
+      
+      final fetchedChannel = ChannelModel.fromMap(doc.data..addAll({'\$id': doc.$id}));
+      
+      if (mounted) {
+        setState(() {
+          // Agar local user ne abhi-abhi subscribe/unsubscribe kiya hai toh server ke purane data se race condition na ho, 
+          // iske liye agar local state already set thi toh use prioritize karenge jab tak fresh data proper na aaye.
+          if (_channel != null && _myId != null) {
+            final localSubscribed = _channel!.subscriberIds.contains(_myId);
+            final serverSubscribed = fetchedChannel.subscriberIds.contains(_myId);
+            if (localSubscribed != serverSubscribed) {
+              // Keep local subscriberIds array override if sync is pending
+              _channel = ChannelModel(
+                id: fetchedChannel.id,
+                name: fetchedChannel.name,
+                description: fetchedChannel.description,
+                creatorId: fetchedChannel.creatorId,
+                subscriberIds: fetchedChannel.subscriberIds,
+              );
+            } else {
+              _channel = fetchedChannel;
+            }
+          } else {
+            _channel = fetchedChannel;
+          }
+          _posts = freshPosts;
+          _loading = false;
+        });
+      }
     } catch (e) {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load channel: $e')));
     }
+    
     _sub ??= AppwriteService.instance.subscribeToMessages(widget.channelId, (doc) {
       if (_posts.any((p) => p.id == doc.$id)) return;
       if (!mounted) return;
@@ -81,14 +105,47 @@ class _ChannelViewScreenState extends State<ChannelViewScreen> {
   Future<void> _toggleSubscribe() async {
     if (_myId == null || _channel == null || _busy) return;
     setState(() => _busy = true);
+
+    final currentlySubscribed = _isSubscribed;
+    final updatedSubscriberIds = List<String>.from(_channel!.subscriberIds);
+    if (currentlySubscribed) {
+      updatedSubscriberIds.remove(_myId);
+    } else {
+      updatedSubscriberIds.add(_myId!);
+    }
+    
+    // Turant UI update (Optimistic Update)
+    setState(() {
+      _channel = ChannelModel(
+        id: _channel!.id,
+        name: _channel!.name,
+        description: _channel!.description,
+        creatorId: _channel!.creatorId,
+        subscriberIds: updatedSubscriberIds,
+      );
+    });
+
     try {
-      if (_isSubscribed) {
+      if (currentlySubscribed) {
         await AppwriteService.instance.unsubscribeChannel(channelId: widget.channelId, userId: _myId!);
       } else {
         await AppwriteService.instance.subscribeChannel(channelId: widget.channelId, userId: _myId!);
       }
-      await _init();
+      
+      // Server se latest confirmed document fetch karke state synchronize karna
+      final doc = await AppwriteService.instance.databases.getDocument(
+        databaseId: 'messgram_db',
+        collectionId: 'channels',
+        documentId: widget.channelId,
+      );
+      if (mounted) {
+        setState(() {
+          _channel = ChannelModel.fromMap(doc.data..addAll({'\$id': doc.$id}));
+        });
+      }
     } catch (e) {
+      // Error aane par wapas purani state par revert karna
+      await _init();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
     } finally {
