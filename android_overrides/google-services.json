@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "369712672409",
+    "project_id": "rawatch-a98e9",
+    "storage_bucket": "rawatch-a98e9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:369712672409:android:f33a1cddf890b2db049208",
+        "android_client_info": {
+          "package_name": "com.mycompany.myapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJrQpHkz2T6PmYGogeRsRUtLVGoOgDWmY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:369712672409:android:47c263d848938dae049208",
+        "android_client_info": {
+          "package_name": "com.texter.texter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJrQpHkz2T6PmYGogeRsRUtLVGoOgDWmY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
