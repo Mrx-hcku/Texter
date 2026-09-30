@@ -1,1 +1,214 @@
+name: Build Texter APK
 
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Scaffold missing android/ platform folder
+        run: |
+          if [ ! -d "android" ]; then
+            flutter create --platforms=android --org com.texter --project-name texter .
+          fi
+
+      - name: Apply custom AndroidManifest
+        run: cp android_overrides/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+
+      - name: Apply google-services.json (Firebase push notifications)
+        run: cp android_overrides/google-services.json android/app/google-services.json
+
+      - name: Add Google Services Gradle plugin
+        run: |
+          python3 -c '
+          import re
+
+          settings_path = "android/settings.gradle.kts"
+          with open(settings_path, "r") as f:
+              content = f.read()
+          if "com.google.gms.google-services" not in content:
+              content = content.replace(
+                  "id(\"com.android.application\") version",
+                  "id(\"com.google.gms.google-services\") version \"4.4.2\" apply false\n    id(\"com.android.application\") version",
+                  1,
+              )
+          with open(settings_path, "w") as f:
+              f.write(content)
+
+          app_gradle_path = "android/app/build.gradle.kts"
+          with open(app_gradle_path, "r") as f:
+              content = f.read()
+          if "com.google.gms.google-services" not in content:
+              content = content.replace("plugins {", "plugins {\n    id(\"com.google.gms.google-services\")")
+          with open(app_gradle_path, "w") as f:
+              f.write(content)
+          print("Added Google Services Gradle plugin safely")
+          '
+
+      - name: Show patched Gradle files (for debugging)
+        run: |
+          echo "===== settings.gradle.kts ====="
+          cat android/settings.gradle.kts
+          echo "===== app/build.gradle.kts (first 20 lines) ====="
+          head -20 android/app/build.gradle.kts
+
+      - name: Apply custom MainActivity (crash logger)
+        run: cp android_overrides/MainActivity.kt android/app/src/main/kotlin/com/texter/texter/MainActivity.kt
+
+      - name: Apply custom Application class (early crash logger + on-screen error)
+        run: cp android_overrides/MyApplication.kt android/app/src/main/kotlin/com/texter/texter/MyApplication.kt
+
+      - name: Apply custom ErrorActivity (on-screen crash display)
+        run: cp android_overrides/ErrorActivity.kt android/app/src/main/kotlin/com/texter/texter/ErrorActivity.kt
+
+      - name: Set minSdkVersion and compileSdk in app/build.gradle.kts safely
+        run: |
+          python3 -c '
+          import re
+          build_path = "android/app/build.gradle.kts"
+          with open(build_path, "r") as f:
+              content = f.read()
+          content = re.sub(r"minSdk\s*=\s*.*", "minSdk = 23", content)
+          content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
+          content = re.sub(r"compileSdk\s*=\s*.*", "compileSdk = 36", content)
+          content = re.sub(r"compileSdkVersion\s+.*", "compileSdkVersion 36", content)
+          if "ndkVersion" in content:
+              content = re.sub(r"ndkVersion\s*=.*", "ndkVersion = \"28.2.13676358\"", content)
+          else:
+              content = content.replace("defaultConfig {", "defaultConfig {\n        ndkVersion = \"28.2.13676358\"")
+          with open(build_path, "w") as f:
+              f.write(content)
+          print("Successfully updated app/build.gradle.kts")
+          '
+
+      - name: Exclude WorkManager (root cause of WorkDatabase crash)
+        run: |
+          python3 -c '
+          build_path = "android/app/build.gradle.kts"
+          with open(build_path, "r") as f:
+              content = f.read()
+          exclusion = """
+          configurations.all {
+              exclude(group = "androidx.work", module = "work-runtime")
+              exclude(group = "androidx.work", module = "work-runtime-ktx")
+          }
+          """
+          if "androidx.work" not in content:
+              content += "\n" + exclusion
+          with open(build_path, "w") as f:
+              f.write(content)
+          print("Excluded androidx.work from build.gradle.kts")
+          '
+
+      - name: Update Gradle wrapper to 9.3.1 (Required by latest Flutter AGP)
+        run: |
+          python3 -c '
+          import re
+          prop_path = "android/gradle/wrapper/gradle-wrapper.properties"
+          with open(prop_path, "r") as f:
+              prop_content = f.read()
+          prop_content = re.sub(r"distributionUrl=.*", "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-all.zip", prop_content)
+          with open(prop_path, "w") as f:
+              f.write(prop_content)
+          print("Successfully updated gradle wrapper to 9.3.1")
+          '
+
+      - name: Remove stale lock file
+        run: rm -f pubspec.lock
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Show which plugin brings in WorkManager
+        run: |
+          find "$HOME/.pub-cache" -path "*/android/build.gradle*" -exec grep -l "androidx.work" {} \; 2>/dev/null || echo "No plugin directly references androidx.work in build.gradle"
+
+      - name: Clear old Kotlin modules to prevent cache metadata mismatch
+        run: |
+          find "$HOME/.pub-cache" -name "*.kotlin_module" -delete || true
+
+      - name: Patch cached plugin packages for compileSdk/minSdk
+        run: |
+          find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$f" || true
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$f" || true
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/g' "$f" || true
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/g' "$f" || true
+          done
+
+      - name: Fix JVM target mismatch across plugins
+        run: |
+          find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
+            sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' "$f" || true
+            sed -i "s/jvmTarget = '1.8'/jvmTarget = '17'/g" "$f" || true
+            sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' "$f" || true
+          done
+
+      - name: Auto-inject missing namespace in old plugins (AGP 9 requirement)
+        run: |
+          python3 -c '
+          import re, os
+          root = os.path.expanduser("~/.pub-cache")
+          for dirpath, _, files in os.walk(root):
+              for fname in ("build.gradle", "build.gradle.kts"):
+                  if fname not in files:
+                      continue
+                  fpath = os.path.join(dirpath, fname)
+                  with open(fpath, "r", errors="ignore") as f:
+                      content = f.read()
+                  if "namespace" in content or ("android {" not in content and "android{" not in content):
+                      continue
+                  manifest = os.path.join(dirpath, "src", "main", "AndroidManifest.xml")
+                  pkg = None
+                  if os.path.exists(manifest):
+                      with open(manifest, "r", errors="ignore") as mf:
+                        m = re.search(r"package=\"([^\"]+)\"", mf.read())
+                        if m:
+                            pkg = m.group(1)
+                  if not pkg:
+                      continue
+                  if fname == "build.gradle.kts":
+                      content = re.sub(r"android\s*\{", f"android {{\n    namespace = \"{pkg}\"", content, count=1)
+                  else:
+                      content = re.sub(r"android\s*\{", f"android {{\n    namespace \"{pkg}\"", content, count=1)
+                  with open(fpath, "w") as f:
+                      f.write(content)
+                  print(f"Injected namespace into {fpath}")
+          '
+
+      - name: Build APK (release)
+        id: build
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee build_log.txt
+
+      - name: Print only the actual error (if build failed)
+        if: failure()
+        run: |
+          echo "===== ERROR SUMMARY ====="
+          grep -E "error:|Error:|FAILURE|Exception|e: file" build_log.txt | sort -u || echo "No specific error line matched — check full log."
+
+      - name: Upload APK artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: texter-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          
