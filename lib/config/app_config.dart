@@ -21,7 +21,7 @@ class UnityAdsConfig {
 class PushServerConfig {
   // Render pe deploy hone ke baad yahan apna actual URL daalo, jaise:
   // "https://texter-push.onrender.com/notify"
-  static const String notifyUrl = "https://pushnotes-ir1i.onrender.com//notify";
+  static const String notifyUrl = "https://pushnotes-ir1i.onrender.com/notify";
 
   // Render ke "Environment" tab me jo NOTIFY_SECRET set kiya hai, wahi
   // bilkul yahan bhi daalo (dono ek jaise hone chahiye).
