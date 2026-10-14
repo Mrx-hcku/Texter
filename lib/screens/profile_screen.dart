@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../config/theme.dart';
 import '../services/appwrite_service.dart';
@@ -53,6 +54,78 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // Professional Feedback SnackBar
+  void _copyUsername() {
+    Clipboard.setData(ClipboardData(text: '@$_name'));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Username copied to clipboard'),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppTheme.surfaceLight,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // Lightweight Professional ID Card Dialog (No external QR library needed)
+  void _showProfileCard() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: 36,
+                backgroundColor: AppTheme.surfaceLight,
+                backgroundImage: _avatarUrl.isNotEmpty ? CachedNetworkImageProvider(_avatarUrl) : null,
+                child: _avatarUrl.isEmpty ? Text(_name.isNotEmpty ? _name[0].toUpperCase() : '?', style: AppTheme.heading(size: 24)) : null,
+              ),
+              const SizedBox(height: 16),
+              Text('@$_name', style: AppTheme.heading(size: 18, color: Colors.white)),
+              const SizedBox(height: 4),
+              Text(_email, style: AppTheme.body(size: 12, color: AppTheme.textSecondary)),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.bg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.surfaceLight),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.verified_user, color: AppTheme.cyan, size: 28),
+                    const SizedBox(height: 8),
+                    Text('Secure Verified Account', style: AppTheme.body(size: 12, color: AppTheme.cyan, weight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.cyan,
+                    foregroundColor: AppTheme.bg,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _logout() async {
     await AppwriteService.instance.logout();
     if (!mounted) return;
@@ -95,7 +168,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(
+        title: const Text('Profile'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.badge_outlined, color: AppTheme.cyan),
+            onPressed: _showProfileCard,
+            tooltip: 'View ID Card',
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: AppTheme.cyan))
           : ListView(
@@ -104,22 +186,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Center(
                   child: Column(
                     children: [
-                      CircleAvatar(
-                        radius: 44,
-                        backgroundColor: AppTheme.surfaceLight,
-                        backgroundImage: _avatarUrl.isNotEmpty ? CachedNetworkImageProvider(_avatarUrl) : null,
-                        // Agar avatar URL 404/broken ho (file delete ho chuki ho DB
-                        // reference bacha ho), toh silently ignore karo — crash nahi.
-                        onBackgroundImageError: _avatarUrl.isNotEmpty ? (_, __) {} : null,
-                        child: _avatarUrl.isEmpty
-                            ? Text(
-                                _name.isNotEmpty ? _name[0].toUpperCase() : '?',
-                                style: AppTheme.heading(size: 32, color: Colors.white70),
-                              )
-                            : null,
+                      Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 44,
+                            backgroundColor: AppTheme.surfaceLight,
+                            backgroundImage: _avatarUrl.isNotEmpty ? CachedNetworkImageProvider(_avatarUrl) : null,
+                            onBackgroundImageError: _avatarUrl.isNotEmpty ? (_, __) {} : null,
+                            child: _avatarUrl.isEmpty
+                                ? Text(
+                                    _name.isNotEmpty ? _name[0].toUpperCase() : '?',
+                                    style: AppTheme.heading(size: 32, color: Colors.white70),
+                                  )
+                                : null,
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(color: AppTheme.cyan, shape: BoxShape.circle),
+                              child: const Icon(Icons.verified, size: 14, color: AppTheme.bg),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
-                      Text('@$_name', style: AppTheme.heading(size: 18)),
+                      InkWell(
+                        onTap: _copyUsername,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('@$_name', style: AppTheme.heading(size: 18)),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.copy_rounded, size: 14, color: AppTheme.cyan),
+                            ],
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         _status.isNotEmpty ? _status : _email,
@@ -150,7 +257,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
                       }),
                       Divider(height: 1, color: AppTheme.surfaceLight),
-                      _tile(Icons.lock_outline, 'Privacy', onTap: () {
+                      _tile(Icons.lock_outline, 'Privacy & Security', onTap: () {
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyScreen()));
                       }),
                     ],
