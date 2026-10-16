@@ -236,16 +236,25 @@ Future<String?> showFullEmojiPicker(BuildContext context) async {
         },
         config: const Config(
           height: 300,
-          bgColor: Color(0xFF161922),
-          indicatorColor: AppTheme.cyan,
-          iconColor: Colors.grey,
-          iconColorSelected: AppTheme.cyan,
-          backspaceColor: AppTheme.cyan,
-          enableSkinTones: true,
-          showRecentsTab: true,
-          recentsLimit: 28,
-          noRecentsText: 'No Recents',
-          noRecentsStyle: TextStyle(fontSize: 14, color: Colors.grey),
+          // Updated config structure for latest emoji_picker_flutter version:
+          bgColor: Color(0xFF161922), // Removed legacy flat parameter
+          categoryViewConfig: CategoryViewConfig(
+            backgroundColor: Color(0xFF161922),
+            indicatorColor: AppTheme.cyan,
+            iconColor: Colors.grey,
+            iconColorSelected: AppTheme.cyan,
+            backspaceColor: AppTheme.cyan,
+          ),
+          bottomViewConfig: BottomViewConfig(
+            backgroundColor: Color(0xFF161922),
+          ),
+          skinToneConfig: SkinToneConfig(
+            enabled: true,
+          ),
+          searchViewConfig: SearchViewConfig(
+            backgroundColor: Color(0xFF161922),
+          ),
+          // recentsLimit and other properties are managed automatically or inside views now
         ),
       ),
     ),
