@@ -3,15 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import '../config/theme.dart';
 
-const List<String> quickReactionEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const List<String> quickReactionEmojis = ['👍', '❤️', '😊', '😢', '😂'];
 
-/// Telegram-style floating menu that appears right next to the tapped
-/// message bubble (instead of a full-width bottom sheet): a quick emoji
-/// reaction row on top, then Reply / Copy / Select / Pin / Delete below.
-///
-/// [tapPosition] is the global position of the long-press (grab it from
-/// `onLongPressStart: (details) => details.globalPosition`), so the menu
-/// opens anchored at that exact spot, like Telegram/WhatsApp.
+/// Telegram-style professional floating action sheet with a vertical emoji
+/// reaction column on the left/side and action menu options on the right,
+/// styled cleanly with a dark/black theme matching background.
 Future<void> showMessageActionSheet(
   BuildContext context, {
   required Offset tapPosition,
@@ -24,125 +20,213 @@ Future<void> showMessageActionSheet(
   VoidCallback? onPin,
   VoidCallback? onReply,
 }) async {
-  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-  final size = overlay.size;
+  final screenSize = MediaQuery.of(context).size;
+  
+  // Intelligent positioning so the popup stays inside the screen boundaries
+  final isRightSide = tapPosition.dx > screenSize.width * 0.5;
+  final isBottomArea = tapPosition.dy > screenSize.height * 0.65;
 
-  final selected = await showMenu<String>(
+  await showDialog(
     context: context,
-    position: RelativeRect.fromLTRB(
-      tapPosition.dx,
-      tapPosition.dy,
-      size.width - tapPosition.dx,
-      size.height - tapPosition.dy,
-    ),
-    color: AppTheme.surface,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    constraints: const BoxConstraints(minWidth: 220, maxWidth: 260),
-    items: [
-      PopupMenuItem<String>(
-        enabled: false,
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            ...quickReactionEmojis.map(
-              (e) => GestureDetector(
-                onTap: () => Navigator.pop(context, 'emoji:$e'),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-                  child: Text(e, style: const TextStyle(fontSize: 22)),
-                ),
+    barrierColor: Colors.black54,
+    builder: (context) {
+      return Stack(
+        children: [
+          // Background dismiss detector
+          GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () => Navigator.pop(context),
+            child: const SizedBox.expand(),
+          ),
+          Positioned(
+            left: isRightSide ? null : 20,
+            right: isRightSide ? 20 : null,
+            top: isBottomArea ? tapPosition.dy - 300 : tapPosition.dy + 10,
+            child: Material(
+              color: Colors.transparent,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Left Side: Vertical Reaction Emojis Card (Dark Theme)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161922),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: const Color(0xFF2A2E39), width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ...quickReactionEmojis.map(
+                          (emoji) => InkWell(
+                            onTap: () {
+                              Navigator.pop(context);
+                              onReact(emoji);
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                            ),
+                          ),
+                        ),
+                        // Plus button for full emoji picker
+                        InkWell(
+                          onTap: () {
+                            Navigator.pop(context);
+                            onMoreEmojis();
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFF232733),
+                            ),
+                            child: const Icon(Icons.add, color: Colors.white70, size: 20),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Right Side: Action Menu Card (Reply, Forward, Copy, Info, Select, Pin, Delete)
+                  Container(
+                    width: 210,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161922),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF2A2E39), width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.5),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (onReply != null)
+                          _buildActionItem(
+                            icon: Icons.reply,
+                            label: 'Reply',
+                            onTap: () {
+                              Navigator.pop(context);
+                              onReply();
+                            },
+                          ),
+                        _buildActionItem(
+                          icon: Icons.near_me_outlined,
+                          label: 'Forward',
+                          onTap: () {
+                            Navigator.pop(context);
+                          },
+                        ),
+                        _buildActionItem(
+                          icon: Icons.copy_rounded,
+                          label: 'Copy',
+                          onTap: () async {
+                            await Clipboard.setData(ClipboardData(text: messageText));
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Text copied to clipboard')),
+                            );
+                          },
+                        ),
+                        _buildActionItem(
+                          icon: Icons.check_circle_outline,
+                          label: 'Select',
+                          onTap: () {
+                            Navigator.pop(context);
+                            onSelect();
+                          },
+                        ),
+                        _buildActionItem(
+                          icon: Icons.info_outline_rounded,
+                          label: 'Info',
+                          onTap: () {
+                            Navigator.pop(context);
+                          },
+                        ),
+                        if (onPin != null)
+                          _buildActionItem(
+                            icon: Icons.push_pin_outlined,
+                            label: 'Pin',
+                            onTap: () {
+                              Navigator.pop(context);
+                              onPin();
+                            },
+                          ),
+                        if (canDelete && onDelete != null)
+                          _buildActionItem(
+                            icon: Icons.delete_outline_rounded,
+                            label: 'Delete',
+                            textColor: Colors.redAccent,
+                            iconColor: Colors.redAccent,
+                            onTap: () {
+                              Navigator.pop(context);
+                              onDelete();
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            GestureDetector(
-              onTap: () => Navigator.pop(context, 'more_emojis'),
-              child: Container(
-                padding: const EdgeInsets.all(5),
-                decoration: BoxDecoration(color: AppTheme.surfaceLight, borderRadius: BorderRadius.circular(16)),
-                child: const Icon(Icons.add, color: Colors.white70, size: 16),
-              ),
-            ),
-          ],
-        ),
-      ),
-      const PopupMenuDivider(height: 8),
-      if (onReply != null)
-        PopupMenuItem<String>(
-          value: 'reply',
-          height: 40,
-          child: Row(children: [
-            const Icon(Icons.reply, color: AppTheme.cyan, size: 20),
-            const SizedBox(width: 12),
-            Text('Reply', style: AppTheme.body(color: Colors.white, size: 14)),
-          ]),
-        ),
-      PopupMenuItem<String>(
-        value: 'copy',
-        height: 40,
-        child: Row(children: [
-          const Icon(Icons.copy_outlined, color: AppTheme.cyan, size: 20),
-          const SizedBox(width: 12),
-          Text('Copy', style: AppTheme.body(color: Colors.white, size: 14)),
-        ]),
-      ),
-      PopupMenuItem<String>(
-        value: 'select',
-        height: 40,
-        child: Row(children: [
-          const Icon(Icons.check_circle_outline, color: AppTheme.cyan, size: 20),
-          const SizedBox(width: 12),
-          Text('Select', style: AppTheme.body(color: Colors.white, size: 14)),
-        ]),
-      ),
-      if (onPin != null)
-        PopupMenuItem<String>(
-          value: 'pin',
-          height: 40,
-          child: Row(children: [
-            const Icon(Icons.push_pin_outlined, color: AppTheme.cyan, size: 20),
-            const SizedBox(width: 12),
-            Text('Pin', style: AppTheme.body(color: Colors.white, size: 14)),
-          ]),
-        ),
-      if (canDelete)
-        PopupMenuItem<String>(
-          value: 'delete',
-          height: 40,
-          child: Row(children: [
-            const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-            const SizedBox(width: 12),
-            Text('Delete', style: AppTheme.body(color: Colors.redAccent, size: 14)),
-          ]),
-        ),
-    ],
+          ),
+        ],
+      );
+    },
   );
-
-  if (selected == null) return;
-
-  if (selected.startsWith('emoji:')) {
-    onReact(selected.substring(6));
-  } else if (selected == 'more_emojis') {
-    onMoreEmojis();
-  } else if (selected == 'reply') {
-    onReply?.call();
-  } else if (selected == 'copy') {
-    await Clipboard.setData(ClipboardData(text: messageText));
-  } else if (selected == 'select') {
-    onSelect();
-  } else if (selected == 'pin') {
-    onPin?.call();
-  } else if (selected == 'delete') {
-    onDelete?.call();
-  }
 }
 
-/// Opens the full emoji picker in a bottom sheet and returns the emoji the
-/// person tapped (or null if they closed it without picking one).
+Widget _buildActionItem({
+  required IconData icon,
+  required String label,
+  required VoidCallback onTap,
+  Color textColor = Colors.white,
+  Color iconColor = Colors.white70,
+}) {
+  return InkWell(
+    onTap: onTap,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Icon(icon, color: iconColor, size: 20),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Opens the full emoji picker in a bottom sheet with a dark theme matching background
 Future<String?> showFullEmojiPicker(BuildContext context) async {
   String? selected;
   await showModalBottomSheet(
     context: context,
-    backgroundColor: AppTheme.surface,
+    backgroundColor: const Color(0xFF161922),
     builder: (ctx) => SizedBox(
       height: 300,
       child: EmojiPicker(
@@ -150,20 +234,31 @@ Future<String?> showFullEmojiPicker(BuildContext context) async {
           selected = emoji.emoji;
           Navigator.pop(ctx);
         },
-        config: const Config(height: 300),
+        config: const Config(
+          height: 300,
+          bgColor: Color(0xFF161922),
+          indicatorColor: AppTheme.cyan,
+          iconColor: Colors.grey,
+          iconColorSelected: AppTheme.cyan,
+          backspaceColor: AppTheme.cyan,
+          enableSkinTones: true,
+          showRecentsTab: true,
+          recentsLimit: 28,
+          noRecentsText: 'No Recents',
+          noRecentsStyle: TextStyle(fontSize: 14, color: Colors.grey),
+        ),
       ),
     ),
   );
   return selected;
 }
 
-/// Confirmation dialog before permanently deleting message(s) from the
-/// database. [count] > 1 pluralizes the wording for multi-select delete.
+/// Confirmation dialog before permanently deleting message(s) from the database.
 Future<bool> confirmDeleteMessages(BuildContext context, int count) async {
   final result = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      backgroundColor: AppTheme.surface,
+      backgroundColor: const Color(0xFF161922),
       title: Text(count > 1 ? 'Delete $count messages?' : 'Delete message?', style: AppTheme.heading(size: 16, color: Colors.white)),
       content: Text(
         'This cannot be undone — it will be removed for everyone.',
