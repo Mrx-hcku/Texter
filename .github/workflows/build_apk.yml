@@ -1,256 +1,266 @@
-name: Build Texter APK
+name: Build Flutter APK & Get SH1
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main", "master" ]
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4[span_1](start_span)[span_1](end_span)
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v4[span_2](start_span)[span_2](end_span)
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: 'zulu[span_3](start_span)'[span_3](end_span)
+          java-version: '17[span_4](start_span)'[span_4](end_span)
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@v2[span_5](start_span)[span_5](end_span)
         with:
-          channel: 'stable'
+          flutter-version: '3.19.2[span_6](start_span)'[span_6](end_span)
+          channel: 'stable[span_7](start_span)'[span_7](end_span)
+          cache: true[span_8](start_span)[span_8](end_span)
 
-      - name: Scaffold missing android/ platform folder
+      - name: Create / Restore Persistent Keystore
         run: |
-          if [ ! -d "android" ]; then
-            flutter create --platforms=android --org com.texter --project-name texter .
+          mkdir -p keystore
+
+          if [ ! -f keystore/key.jks ]; then
+            if [ -f android/app/key.jks ]; then
+              echo "Purana android/app/key.jks migrate kar rahe hain..."
+              cp android/app/key.jks keystore/key.jks
+            elif [ -f key.jks ]; then
+              echo "Purana key.jks migrate kar rahe hain..."
+              cp key.jks keystore/key.jks
+            else
+              echo "Naya permanent keystore ban raha hai (sirf pehli baar)..."
+              keytool -genkeypair -v \
+                -keystore keystore/key.jks \
+                -keyalg RSA -keysize 2048 -validity 36500 \
+                -alias key -storepass android123 -keypass android123 \
+                -dname "CN=TalkSpike, OU=App, O=TalkSpike, L=Lucknow, ST=Uttar Pradesh, C=IN"
+            fi
           fi
 
-      - name: Apply custom AndroidManifest
-        run: cp android_overrides/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          keytool -list -keystore keystore/key.jks -alias key -storepass android123 > /dev/null \
+            || { echo "::error::keystore alias 'key' / password 'android123' match nahi kar raha"; exit 1; }[span_9](start_span)[span_9](end_span)
 
-      - name: Apply google-services.json (Firebase push notifications)
-        run: cp android_overrides/google-services.json android/app/google-services.json
-
-      - name: Add Google Services Gradle plugin
+      - name: Commit Keystore Back To Repo (only if new)
         run: |
-          python3 -c '
-          import re
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f keystore/key.jks
+          if git diff --cached --quiet; then
+            echo "Keystore already repo me hai."
+          else
+            git commit -m "Add persistent signing keystore [skip ci]"
+            git push origin HEAD:${{ github.ref_name }} \
+              || { echo "::error::Keystore push fail hua. Repo Settings > Actions > General > Workflow permissions = Read and write karo."; exit 1; }
+          fi[span_10](start_span)[span_10](end_span)
 
-          settings_path = "android/settings.gradle.kts"
-          with open(settings_path, "r") as f:
-              content = f.read()
-          if "com.google.gms.google-services" not in content:
-              content = content.replace(
-                  "id(\"com.android.application\") version",
-                  "id(\"com.google.gms.google-services\") version \"4.4.2\" apply false\n    id(\"com.android.application\") version",
-                  1,
-              )
-          with open(settings_path, "w") as f:
-              f.write(content)
-
-          app_gradle_path = "android/app/build.gradle.kts"
-          with open(app_gradle_path, "r") as f:
-              content = f.read()
-          if "com.google.gms.google-services" not in content:
-              content = re.sub(
-                  r"(plugins\s*\{)",
-                  r"\1\n    id(\"com.google.gms.google-services\")",
-                  content,
-                  count=1,
-              )
-          with open(app_gradle_path, "w") as f:
-              f.write(content)
-          print("Added Google Services Gradle plugin")
-          '
-
-      - name: Show patched Gradle files (for debugging)
+      - name: Recreate Clean Android Platform
         run: |
-          echo "===== settings.gradle.kts ====="
-          cat android/settings.gradle.kts
-          echo "===== app/build.gradle.kts (first 20 lines) ====="
-          head -20 android/app/build.gradle.kts
-
-      - name: Apply custom MainActivity (crash logger)
-        run: cp android_overrides/MainActivity.kt android/app/src/main/kotlin/com/texter/texter/MainActivity.kt
-
-      - name: Apply custom Application class (early crash logger + on-screen error)
-        run: cp android_overrides/MyApplication.kt android/app/src/main/kotlin/com/texter/texter/MyApplication.kt
-
-      - name: Apply custom ErrorActivity (on-screen crash display)
-        run: cp android_overrides/ErrorActivity.kt android/app/src/main/kotlin/com/texter/texter/ErrorActivity.kt
-
-      - name: Set minSdkVersion and compileSdk in app/build.gradle.kts safely
-        run: |
-          python3 -c '
-          import re
-          build_path = "android/app/build.gradle.kts"
-          with open(build_path, "r") as f:
-              content = f.read()
-          content = re.sub(r"minSdk\s*=\s*.*", "minSdk = 23", content)
-          content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
-          content = re.sub(r"compileSdk\s*=\s*.*", "compileSdk = 36", content)
-          content = re.sub(r"compileSdkVersion\s+.*", "compileSdkVersion 36", content)
-          if "ndkVersion" in content:
-              content = re.sub(r"ndkVersion\s*=.*", "ndkVersion = \"28.2.13676358\"", content)
-          else:
-              content = content.replace("defaultConfig {", "defaultConfig {\n        ndkVersion = \"28.2.13676358\"")
-          with open(build_path, "w") as f:
-              f.write(content)
-          print("Successfully updated app/build.gradle.kts")
-          '
-
-      - name: Exclude WorkManager (root cause of WorkDatabase crash)
-        run: |
-          python3 -c '
-          build_path = "android/app/build.gradle.kts"
-          with open(build_path, "r") as f:
-              content = f.read()
-          exclusion = """
-          configurations.all {
-              exclude(group = "androidx.work", module = "work-runtime")
-              exclude(group = "androidx.work", module = "work-runtime-ktx")
-          }
-          """
-          if "androidx.work" not in content:
-              content += "\n" + exclusion
-          with open(build_path, "w") as f:
-              f.write(content)
-          print("Excluded androidx.work from build.gradle.kts")
-          '
-
-      - name: Update Gradle wrapper to 9.3.1 (Required by latest Flutter AGP)
-        run: |
-          python3 -c '
-          import re
-          prop_path = "android/gradle/wrapper/gradle-wrapper.properties"
-          with open(prop_path, "r") as f:
-              prop_content = f.read()
-          prop_content = re.sub(r"distributionUrl=.*", "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-all.zip", prop_content)
-          with open(prop_path, "w") as f:
-              f.write(prop_content)
-          print("Successfully updated gradle wrapper to 9.3.1")
-          '
-
-      - name: Remove stale lock file
-        run: rm -f pubspec.lock
-
-      - name: Get dependencies
-        run: flutter pub get
-
-      - name: Show which plugin brings in WorkManager
-        run: |
-          find "$HOME/.pub-cache" -path "*/android/build.gradle*" -exec grep -l "androidx.work" {} \; 2>/dev/null || echo "No plugin directly references androidx.work in build.gradle"
-
-      - name: Clear old Kotlin modules to prevent cache metadata mismatch
-        run: |
-          find "$HOME/.pub-cache" -name "*.kotlin_module" -delete || true
-
-      - name: Patch cached plugin packages for compileSdk/minSdk
-        run: |
-          find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
-            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$f" || true
-            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$f" || true
-            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/g' "$f" || true
-            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/g' "$f" || true
+          GS=""
+          for f in android/app/google-services.json android/google-services.json google-services.json; do
+            if [ -f "$f" ]; then GS="$f"; break; fi
           done
+          if [ -z "$GS" ]; then
+            echo "::error::google-services.json repo me nahi mila (android/app/ me rakho)."
+            exit 1
+          fi
+          cp "$GS" "$RUNNER_TEMP/google-services.json"
 
-      - name: Fix JVM target mismatch across plugins
+          rm -rf android
+          flutter create . --platforms=android --project-name talkspike --org com.example
+
+          mkdir -p android/app
+          cp "$RUNNER_TEMP/google-services.json" android/app/google-services.json
+          echo "google-services.json restore ho gaya.[span_11](start_span)"[span_11](end_span)
+
+      - name: Patch Android Project (Firebase, Signing, Permissions, Package)
         run: |
-          find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
-            sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' "$f" || true
-            sed -i "s/jvmTarget = '1.8'/jvmTarget = '17'/g" "$f" || true
-            sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' "$f" || true
-          done
+          cat > android/key.properties <<EOF
+          storePassword=android123
+          keyPassword=android123
+          keyAlias=key
+          storeFile=$GITHUB_WORKSPACE/keystore/key.jks
+          EOF
 
-      - name: Auto-inject missing namespace in old plugins (AGP 9 requirement)
+          python3 - <<'PY'
+          import json, os, re, sys
+
+          def fail(msg):
+              print("ERROR: " + msg)
+              sys.exit(1)
+
+          # 1) google-services.json se real package name nikalo
+          with open("android/app/google-services.json") as f:
+              gs = json.load(f)
+          pkg = None
+          for c in gs.get("client", []):
+              p = c.get("client_info", {}).get("android_client_info", {}).get("package_name")
+              if p:
+                  pkg = p
+                  break
+          if not pkg:
+              fail("google-services.json me package_name nahi mila")
+          print("Package name:", pkg)
+
+          # 2) android/settings.gradle -> google-services plugin declare
+          sp = "android/settings.gradle"
+          st = open(sp).read()
+          if "com.google.gms.google-services" not in st:
+              st, n = re.subn(
+                  r'(id\s+"com\.android\.application"\s+version\s+"[^"]+"\s+apply\s+false[ \t]*\n)',
+                  lambda m: m.group(1) + '    id "com.google.gms.google-services" version "4.3.15" apply false\n',
+                  st, count=1)
+              if n == 0:
+                  fail("settings.gradle me plugins block nahi mila")
+              open(sp, "w").write(st)
+
+          # 3) android/app/build.gradle
+          bp = "android/app/build.gradle"
+          s = open(bp).read()
+
+          s = s.replace("com.example.talkspike", pkg)
+          # minSdkVersion ko 28 (Android 9 Pie) set kiya gaya hai
+          s = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 28', s)
+
+          if "com.google.gms.google-services" not in s:
+              s, n = re.subn(
+                  r'(id\s+"dev\.flutter\.flutter-gradle-plugin"[ \t]*\n)',
+                  lambda m: m.group(1) + '    id "com.google.gms.google-services"\n',
+                  s, count=1)
+              if n == 0:
+                  fail("app/build.gradle me plugins block nahi mila")
+
+          signing_block = (
+              "\n    signingConfigs {\n"
+              "        release {\n"
+              "            keyAlias keystoreProperties[\"keyAlias\"]\n"
+              "            keyPassword keystoreProperties[\"keyPassword\"]\n"
+              "            storeFile keystoreProperties[\"storeFile\"] ? file(keystoreProperties[\"storeFile\"]) : null\n"
+              "            storePassword keystoreProperties[\"storePassword\"]\n"
+              "        }\n"
+              "    }\n"
+          )
+          keystore_code = (
+              "def keystoreProperties = new Properties()\n"
+              "def keystorePropertiesFile = rootProject.file(\"key.properties\")\n"
+              "if (keystorePropertiesFile.exists()) {\n"
+              "    keystorePropertiesFile.withReader(\"UTF-8\") { reader -> keystoreProperties.load(reader) }\n"
+              "}\n\n"
+          )
+
+          s, n = re.subn(r'^android\s*\{[ \t]*\n',
+                         lambda m: keystore_code + "android {" + signing_block + "\n",
+                         s, count=1, flags=re.M)
+          if n == 0:
+              fail("app/build.gradle me android { block nahi mila")
+
+          # release build ko apni permanent key se sign karo
+          s, n = re.subn(
+              r'signingConfig\s+signingConfigs\.debug',
+              'signingConfig signingConfigs.release\n'
+              '            minifyEnabled false\n'
+              '            shrinkResources false',
+              s, count=1)
+          if n == 0:
+              fail("release signingConfig line nahi mili")
+
+          open(bp, "w").write(s)
+
+          # 4) MainActivity ko sahi package me lao
+          base = "android/app/src/main/kotlin"
+          src = None
+          for root, _, files in os.walk(base):
+              if "MainActivity.kt" in files:
+                  src = os.path.join(root, "MainActivity.kt")
+                  break
+          if not src:
+              fail("MainActivity.kt nahi mila")
+          code = open(src).read()
+          code = re.sub(r'^package\s+[\w.]+', "package " + pkg, code, count=1, flags=re.M)
+          dest_dir = os.path.join(base, *pkg.split("."))
+          os.makedirs(dest_dir, exist_ok=True)
+          dest = os.path.join(dest_dir, "MainActivity.kt")
+          if os.path.abspath(src) != os.path.abspath(dest):
+              os.remove(src)
+          open(dest, "w").write(code)
+          for root, dirs, files in os.walk(base, topdown=False):
+              if root != base and not os.listdir(root):
+                os.rmdir(root)
+
+          # 5) Manifest: INTERNET, notifications, app name
+          mp = "android/app/src/main/AndroidManifest.xml"
+          m = open(mp).read()
+          for perm in ["android.permission.INTERNET", "android.permission.POST_NOTIFICATIONS"]:
+              if perm not in m:
+                  m = m.replace("<application",
+                                '<uses-permission android:name="%s"/>\n    <application' % perm, 1)
+          m = re.sub(r'android:label="[^"]*"', 'android:label="TalkSpike"', m, count=1)
+          open(mp, "w").write(m)
+
+          print("Android project patched OK")
+          PY
+
+          echo "---- app/build.gradle ----"
+          cat android/app/build.gradle
+          echo "---- settings.gradle ----"
+          cat android/settings.gradle[span_12](start_span)[span_12](end_span)
+
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x android/gradlew[span_13](start_span)[span_13](end_span)
+
+      - name: Install Dependencies
         run: |
-          python3 -c '
-          import re, os
-          root = os.path.expanduser("~/.pub-cache")
-          for dirpath, _, files in os.walk(root):
-              for fname in ("build.gradle", "build.gradle.kts"):
-                  if fname not in files:
-                      continue
-                  fpath = os.path.join(dirpath, fname)
-                  with open(fpath, "r", errors="ignore") as f:
-                      content = f.read()
-                  if "namespace" in content or ("android {" not in content and "android{" not in content):
-                      continue
-                  manifest = os.path.join(dirpath, "src", "main", "AndroidManifest.xml")
-                  pkg = None
-                  if os.path.exists(manifest):
-                      with open(manifest, "r", errors="ignore") as mf:
-                          m = re.search(r"package=\"([^\"]+)\"", mf.read())
-                          if m:
-                              pkg = m.group(1)
-                  if not pkg:
-                      continue
-                  if fname == "build.gradle.kts":
-                      content = re.sub(r"android\s*\{", f"android {{\n    namespace = \"{pkg}\"", content, count=1)
-                  else:
-                      content = re.sub(r"android\s*\{", f"android {{\n    namespace \"{pkg}\"", content, count=1)
-                  with open(fpath, "w") as f:
-                      f.write(content)
-                  print(f"Injected namespace into {fpath}")
-          '
+          flutter pub add image_picker:1.0.7 path_provider:2.1.2 http
+          flutter pub get
+          grep -E "^\s+image_picker:" pubspec.yaml || { echo "::error::image_picker pubspec me add nahi hua"; exit 1; }
+          grep -E "^\s+http:" pubspec.yaml || { echo "::error::http pubspec me add nahi hua"; exit 1; }
+          grep -E "^\s+path_provider:" pubspec.yaml || { echo "::error::path_provider pubspec me add nahi hua"; exit 1; }[span_14](start_span)[span_14](end_span)
 
-      - name: Enable code/resource shrinking for a smaller APK
+      - name: Build APK (Release - 64-bit Only)
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHANNEL_ID: ${{ secrets.TG_CHANNEL_ID }}
         run: |
-          python3 -c '
-          build_path = "android/app/build.gradle.kts"
-          with open(build_path, "r") as f:
-              content = f.read()
-          if "isMinifyEnabled" not in content:
-              shrink_block = """
-          buildTypes {
-              getByName("release") {
-                  isMinifyEnabled = true
-                  isShrinkResources = true
-                  proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-                  signingConfig = signingConfigs.getByName("debug")
-              }
-          }
-          """
-              # Replace an existing empty/simple buildTypes block if present, else append inside android {}
-              import re
-              if re.search(r"buildTypes\s*\{", content):
-                  content = re.sub(r"buildTypes\s*\{[^}]*\}", shrink_block.strip(), content, count=1, flags=re.DOTALL)
-              else:
-                  content = re.sub(r"android\s*\{", "android {" + shrink_block, content, count=1)
-          with open(build_path, "w") as f:
-              f.write(content)
-          print("Enabled minify + resource shrinking")
-          '
-          # Minimal proguard-rules.pro — Flutter/Appwrite/Firebase already
-          # ship their own consumer rules, this just needs to exist.
-          touch android/app/proguard-rules.pro
+          if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHANNEL_ID" ]; then
+            echo "::notice::TG secrets set nahi hain, code ke default token/channel use honge."
+          fi
+          # Yahan --target-platform android-arm64 jod diya gaya hai taaki sirf 64-bit APK bane
+          flutter build apk --release \
+            --target-platform android-arm64 \
+            --dart-define=TG_BOT_TOKEN="$TG_BOT_TOKEN" \
+            --dart-define=TG_CHANNEL_ID="$TG_CHANNEL_ID[span_15](start_span)"[span_15](end_span)
 
-      - name: Build APK (release, split per CPU architecture — much smaller than a universal APK)
-        id: build
+      - name: Print SHA-1 & SHA-256
         run: |
-          set -o pipefail
-          flutter build apk --release --split-per-abi 2>&1 | tee build_log.txt
+          keytool -list -v -keystore keystore/key.jks -alias key -storepass android123 \
+            | grep -E "SHA1:|SHA256:" | sed 's/^ *//' | tee sha.txt
+          {
+            echo "### Signing certificate (har build me same)"
+            echo '```'
+            cat sha.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY[span_16](start_span)"[span_16](end_span)
 
-      - name: Print only the actual error (if build failed)
-        if: failure()
-        run: |
-          echo "===== ERROR SUMMARY ====="
-          grep -E "error:|Error:|FAILURE|Exception|e: file" build_log.txt | sort -u || echo "No specific error line matched — check full log."
-
-      - name: Upload APK artifact (arm64 — use this one, it covers virtually every phone made since ~2018)
-        if: success()
-        uses: actions/upload-artifact@v4
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4[span_17](start_span)[span_17](end_span)
         with:
-          name: texter-release-apk-arm64
-          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-
-      - name: Upload APK artifact (armeabi-v7a — only needed for very old/budget 32-bit devices)
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: texter-release-apk-armeabi-v7a
-          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          name: release-apk[span_18](start_span)[span_18](end_span)
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            sha.txt[span_19](start_span)[span_19](end_span)
