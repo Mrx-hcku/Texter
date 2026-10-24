@@ -5,11 +5,23 @@ import 'package:flutter/services.dart';
 class TexterBubble {
   static const MethodChannel _channel = MethodChannel('texter/bubble');
 
+  /// True on Android 11+ (real notification bubbles available).
+  static Future<bool> isSupported() async {
+    try {
+      return await _channel.invokeMethod<bool>('isSupported') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<bool> attach({
     required int id,
     required String chatId,
     required String kind,
     required String chatName,
+    required String senderName,
+    required String body,
+    List<Map<String, Object?>> messages = const [],
     String? avatarPath,
   }) async {
     try {
@@ -18,6 +30,9 @@ class TexterBubble {
         'chatId': chatId,
         'kind': kind,
         'chatName': chatName,
+        'senderName': senderName,
+        'body': body,
+        'messages': messages,
         'avatarPath': avatarPath,
       });
       return ok ?? false;
