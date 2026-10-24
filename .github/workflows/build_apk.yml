@@ -1,0 +1,355 @@
+name: Build Texter APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Create texter_bubble native plugin (notification Bubble button)
+        run: |
+          if [ ! -d "packages/texter_bubble" ]; then
+            flutter create --no-pub --template=plugin --platforms=android -a kotlin --org com.texter packages/texter_bubble
+          fi
+          python3 - <<'PY'
+          import re, glob
+          base = "packages/texter_bubble"
+          kts = glob.glob(base + "/android/src/main/kotlin/**/*Plugin.kt", recursive=True)
+          assert len(kts) == 1, kts
+          old = open(kts[0]).read()
+          pkg = re.search(r"^package\s+([\w.]+)", old, re.M).group(1)
+          cls = re.search(r"^class\s+(\w+)", old, re.M).group(1)
+          tpl = open("android_overrides/TexterBubblePlugin.kt").read()
+          open(kts[0], "w").write(tpl.replace("__PKG__", pkg).replace("__CLASS__", cls))
+          open(base + "/lib/texter_bubble.dart", "w").write(open("android_overrides/texter_bubble.dart").read())
+          for g in glob.glob(base + "/android/build.gradle*"):
+              c = open(g).read()
+              c = re.sub(r"(minSdk(?:Version)?)(\s*=\s*|\s+)\d+", r"\g<1>\g<2>23", c)
+              c = re.sub(r"(compileSdk(?:Version)?)(\s*=\s*|\s+)flutter\.compileSdkVersion", r"\g<1>\g<2>36", c)
+              open(g, "w").write(c)
+          print("texter_bubble plugin ready:", pkg, cls)
+          PY
+
+      - name: Scaffold missing android/ platform folder
+        run: |
+          if [ ! -d "android" ]; then
+            flutter create --platforms=android --org com.texter --project-name texter .
+          fi
+
+      - name: Apply custom AndroidManifest
+        run: cp android_overrides/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+
+      - name: Apply google-services.json (Firebase push notifications)
+        run: cp android_overrides/google-services.json android/app/google-services.json
+
+      - name: Add Google Services Gradle plugin
+        run: |
+          python3 -c '
+          import re
+
+          settings_path = "android/settings.gradle.kts"
+          with open(settings_path, "r") as f:
+              content = f.read()
+          if "com.google.gms.google-services" not in content:
+              content = content.replace(
+                  "id(\"com.android.application\") version",
+                  "id(\"com.google.gms.google-services\") version \"4.4.2\" apply false\n    id(\"com.android.application\") version",
+                  1,
+              )
+          with open(settings_path, "w") as f:
+              f.write(content)
+
+          app_gradle_path = "android/app/build.gradle.kts"
+          with open(app_gradle_path, "r") as f:
+              content = f.read()
+          if "com.google.gms.google-services" not in content:
+              content = re.sub(
+                  r"(plugins\s*\{)",
+                  lambda m: m.group(1) + "\n    id(\"com.google.gms.google-services\")",
+                  content,
+                  count=1,
+              )
+          with open(app_gradle_path, "w") as f:
+              f.write(content)
+          print("Added Google Services Gradle plugin")
+          '
+
+      - name: Show patched Gradle files (for debugging)
+        run: |
+          echo "===== settings.gradle.kts ====="
+          cat android/settings.gradle.kts
+          echo "===== app/build.gradle.kts (first 20 lines) ====="
+          head -20 android/app/build.gradle.kts
+
+      - name: Apply custom MainActivity (crash logger)
+        run: cp android_overrides/MainActivity.kt android/app/src/main/kotlin/com/texter/texter/MainActivity.kt
+
+      - name: Apply custom Application class (early crash logger + on-screen error)
+        run: cp android_overrides/MyApplication.kt android/app/src/main/kotlin/com/texter/texter/MyApplication.kt
+
+      - name: Apply BubbleActivity (notification bubble window)
+        run: cp android_overrides/BubbleActivity.kt android/app/src/main/kotlin/com/texter/texter/BubbleActivity.kt
+
+      - name: Apply custom ErrorActivity (on-screen crash display)
+        run: cp android_overrides/ErrorActivity.kt android/app/src/main/kotlin/com/texter/texter/ErrorActivity.kt
+
+      - name: Set minSdkVersion and compileSdk in app/build.gradle.kts safely
+        run: |
+          python3 -c '
+          import re
+          build_path = "android/app/build.gradle.kts"
+          with open(build_path, "r") as f:
+              content = f.read()
+          content = re.sub(r"minSdk\s*=\s*.*", "minSdk = 23", content)
+          content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
+          content = re.sub(r"compileSdk\s*=\s*.*", "compileSdk = 36", content)
+          content = re.sub(r"compileSdkVersion\s+.*", "compileSdkVersion 36", content)
+          if "ndkVersion" in content:
+              content = re.sub(r"ndkVersion\s*=.*", "ndkVersion = \"28.2.13676358\"", content)
+          else:
+              content = content.replace("defaultConfig {", "defaultConfig {\n        ndkVersion = \"28.2.13676358\"")
+          with open(build_path, "w") as f:
+              f.write(content)
+          print("Successfully updated app/build.gradle.kts")
+          '
+
+      - name: Exclude WorkManager (root cause of WorkDatabase crash)
+        run: |
+          python3 -c '
+          build_path = "android/app/build.gradle.kts"
+          with open(build_path, "r") as f:
+              content = f.read()
+          exclusion = """
+          configurations.all {
+              exclude(group = "androidx.work", module = "work-runtime")
+              exclude(group = "androidx.work", module = "work-runtime-ktx")
+          }
+          """
+          if "androidx.work" not in content:
+              content += "\n" + exclusion
+          with open(build_path, "w") as f:
+              f.write(content)
+          print("Excluded androidx.work from build.gradle.kts")
+          '
+
+      - name: Enable core library desugaring (required by flutter_local_notifications)
+        run: |
+          python3 -c '
+          p = "android/app/build.gradle.kts"
+          c = open(p).read()
+          if "isCoreLibraryDesugaringEnabled" not in c:
+              if "compileOptions {" in c:
+                  c = c.replace("compileOptions {", "compileOptions {\n        isCoreLibraryDesugaringEnabled = true", 1)
+              else:
+                  c = c.replace("android {", "android {\n    compileOptions {\n        isCoreLibraryDesugaringEnabled = true\n    }", 1)
+          if "coreLibraryDesugaring(" not in c:
+              c += "\ndependencies {\n    coreLibraryDesugaring(\"com.android.tools:desugar_jdk_libs:2.1.4\")\n}\n"
+          open(p, "w").write(c)
+          print("Enabled core library desugaring")
+          '
+
+      - name: Update Gradle wrapper to 9.3.1 (Required by latest Flutter AGP)
+        run: |
+          python3 -c '
+          import re
+          prop_path = "android/gradle/wrapper/gradle-wrapper.properties"
+          with open(prop_path, "r") as f:
+              prop_content = f.read()
+          prop_content = re.sub(r"distributionUrl=.*", "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-all.zip", prop_content)
+          with open(prop_path, "w") as f:
+              f.write(prop_content)
+          print("Successfully updated gradle wrapper to 9.3.1")
+          '
+
+      - name: Remove stale lock file
+        run: rm -f pubspec.lock
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Show which plugin brings in WorkManager
+        run: |
+          find "$HOME/.pub-cache" -path "*/android/build.gradle*" -exec grep -l "androidx.work" {} \; 2>/dev/null || echo "No plugin directly references androidx.work in build.gradle"
+
+      - name: Clear old Kotlin modules to prevent cache metadata mismatch
+        run: |
+          find "$HOME/.pub-cache" -name "*.kotlin_module" -delete || true
+
+      - name: Patch cached plugin packages for compileSdk/minSdk
+        run: |
+          find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$f" || true
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$f" || true
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/g' "$f" || true
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/g' "$f" || true
+          done
+
+      - name: Fix JVM target mismatch across plugins
+        run: |
+          find "$HOME/.pub-cache" -path "*/android/build.gradle*" 2>/dev/null | while read f; do
+            sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' "$f" || true
+            sed -i "s/jvmTarget = '1.8'/jvmTarget = '17'/g" "$f" || true
+            sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' "$f" || true
+          done
+
+      - name: Auto-inject missing namespace in old plugins (AGP 9 requirement)
+        run: |
+          python3 -c '
+          import re, os
+          root = os.path.expanduser("~/.pub-cache")
+          for dirpath, _, files in os.walk(root):
+              for fname in ("build.gradle", "build.gradle.kts"):
+                  if fname not in files:
+                      continue
+                  fpath = os.path.join(dirpath, fname)
+                  with open(fpath, "r", errors="ignore") as f:
+                      content = f.read()
+                  if "namespace" in content or ("android {" not in content and "android{" not in content):
+                      continue
+                  manifest = os.path.join(dirpath, "src", "main", "AndroidManifest.xml")
+                  pkg = None
+                  if os.path.exists(manifest):
+                      with open(manifest, "r", errors="ignore") as mf:
+                          m = re.search(r"package=\"([^\"]+)\"", mf.read())
+                          if m:
+                              pkg = m.group(1)
+                  if not pkg:
+                      continue
+                  if fname == "build.gradle.kts":
+                      content = re.sub(r"android\s*\{", f"android {{\n    namespace = \"{pkg}\"", content, count=1)
+                  else:
+                      content = re.sub(r"android\s*\{", f"android {{\n    namespace \"{pkg}\"", content, count=1)
+                  with open(fpath, "w") as f:
+                      f.write(content)
+                  print(f"Injected namespace into {fpath}")
+          '
+
+      - name: Enable code/resource shrinking for a smaller APK
+        run: |
+          python3 -c '
+          build_path = "android/app/build.gradle.kts"
+          with open(build_path, "r") as f:
+              content = f.read()
+
+          if "isMinifyEnabled" in content:
+              print("Minify already configured, skipping.")
+          else:
+              start = content.find("buildTypes")
+              if start == -1:
+                  # No buildTypes block at all — insert a brand new one right
+                  # after the opening of the android { } block.
+                  idx = content.find("android {")
+                  if idx != -1:
+                      insert_at = idx + len("android {")
+                      new_block = (
+                          "\n    buildTypes {\n"
+                          "        getByName(\"release\") {\n"
+                          "            isMinifyEnabled = true\n"
+                          "            isShrinkResources = true\n"
+                          "            proguardFiles(getDefaultProguardFile(\"proguard-android-optimize.txt\"), \"proguard-rules.pro\")\n"
+                          "            signingConfig = signingConfigs.getByName(\"debug\")\n"
+                          "        }\n"
+                          "    }\n"
+                      )
+                      content = content[:insert_at] + new_block + content[insert_at:]
+                      print("Added new buildTypes block.")
+              else:
+                  # A buildTypes block already exists — find its TRUE matching
+                  # closing brace by counting braces (a flat regex like
+                  # "buildTypes\\s*\\{[^}]*\\}" stops at the FIRST inner "}" and
+                  # corrupts the file, since this block is always nested).
+                  open_brace = content.find("{", start)
+                  depth = 0
+                  i = open_brace
+                  while i < len(content):
+                      if content[i] == "{":
+                          depth += 1
+                      elif content[i] == "}":
+                          depth -= 1
+                          if depth == 0:
+                              break
+                      i += 1
+                  end_brace = i  # index of the true matching closing brace
+                  block_text = content[start:end_brace + 1]
+                  if "getByName(\"release\")" in block_text or "release {" in block_text:
+                      # A release block already exists — just make sure the
+                      # three key lines are present inside it, right after its
+                      # own opening brace, without touching anything else.
+                      rel_idx = block_text.find("getByName(\"release\")")
+                      if rel_idx == -1:
+                          rel_idx = block_text.find("release {")
+                      rel_open = block_text.find("{", rel_idx)
+                      insertion = ""
+                      if "isMinifyEnabled" not in block_text:
+                          insertion += "\n            isMinifyEnabled = true"
+                      if "isShrinkResources" not in block_text:
+                          insertion += "\n            isShrinkResources = true"
+                      if "proguard-rules.pro" not in block_text:
+                          insertion += "\n            proguardFiles(getDefaultProguardFile(\"proguard-android-optimize.txt\"), \"proguard-rules.pro\")"
+                      block_text = block_text[:rel_open + 1] + insertion + block_text[rel_open + 1:]
+                  else:
+                      # buildTypes exists but has no release block — add one.
+                      inner_open = block_text.find("{")
+                      release_block = (
+                          "\n        getByName(\"release\") {\n"
+                          "            isMinifyEnabled = true\n"
+                          "            isShrinkResources = true\n"
+                          "            proguardFiles(getDefaultProguardFile(\"proguard-android-optimize.txt\"), \"proguard-rules.pro\")\n"
+                          "            signingConfig = signingConfigs.getByName(\"debug\")\n"
+                          "        }\n"
+                      )
+                      block_text = block_text[:inner_open + 1] + release_block + block_text[inner_open + 1:]
+                  content = content[:start] + block_text + content[end_brace + 1:]
+                  print("Updated existing buildTypes block.")
+
+          with open(build_path, "w") as f:
+              f.write(content)
+          '
+          # proguard-rules.pro — keeps flutter_local_notifications working in the
+          # shrunk release build (without these, cancel()/show() crash with
+          # "Missing type parameter" because R8 strips Gson's generic info).
+          cat > android/app/proguard-rules.pro <<'RULES'
+          -keepattributes Signature
+          -keepattributes *Annotation*
+          -keep class com.dexterous.** { *; }
+          -keep class com.google.gson.reflect.TypeToken { *; }
+          -keep class * extends com.google.gson.reflect.TypeToken
+          -keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
+          -keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
+          RULES
+
+      - name: Build APK (release, arm64 only — smaller + faster build, covers virtually every phone made since ~2018)
+        id: build
+        run: |
+          set -o pipefail
+          flutter build apk --release --target-platform android-arm64 --split-debug-info=build/symbols --obfuscate 2>&1 | tee build_log.txt
+
+      - name: Print only the actual error (if build failed)
+        if: failure()
+        run: |
+          echo "===== ERROR SUMMARY ====="
+          grep -E "error:|Error:|FAILURE|Exception|e: file" build_log.txt | sort -u || echo "No specific error line matched — check full log."
+
+      - name: Upload APK artifact (arm64-only build — covers virtually every phone made since ~2018)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: texter-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
