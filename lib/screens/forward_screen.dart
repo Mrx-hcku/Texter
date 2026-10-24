@@ -122,15 +122,16 @@ class _ForwardScreenState extends State<ForwardScreen> {
 
   Widget _sectionHeader(String title) => Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
-        child: Text(title, style: AppTheme.body(color: AppTheme.cyan, weight: FontWeight.w600, size: 13)),
+        child: Text(title, style: AppTheme.body(color: UiPalette.of(context).accent, weight: FontWeight.w600, size: 13)),
       );
 
   Widget _tile({required String name, required String id, required IconData icon}) {
+    final u = UiPalette.of(context);
     final sending = _sendingToId == id;
     return ListTile(
-      leading: CircleAvatar(backgroundColor: AppTheme.surfaceLight, child: Icon(icon, color: AppTheme.cyan, size: 18)),
-      title: Text(name.isEmpty ? 'Unnamed' : name, style: AppTheme.body(color: Colors.white)),
-      trailing: sending ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan)) : null,
+      leading: CircleAvatar(backgroundColor: u.cardAlt, child: Icon(icon, color: u.accent, size: 18)),
+      title: Text(name.isEmpty ? 'Unnamed' : name, style: AppTheme.body(color: u.text)),
+      trailing: sending ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: u.accent)) : null,
       onTap: sending ? null : () => _forwardTo(chatId: id),
     );
   }

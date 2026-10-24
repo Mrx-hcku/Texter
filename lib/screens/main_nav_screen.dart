@@ -24,35 +24,39 @@ class _MainNavScreenState extends State<MainNavScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final u = UiPalette.of(context);
     return Scaffold(
       body: IndexedStack(index: _index, children: _screens),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: u.border))),
+        child: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
-        backgroundColor: AppTheme.surface,
-        indicatorColor: AppTheme.cyan.withOpacity(0.15),
+        backgroundColor: u.card,
+        indicatorColor: u.accent.withOpacity(0.15),
         destinations: [
           NavigationDestination(
             icon: const Icon(Icons.chat_bubble_outline),
-            selectedIcon: Icon(Icons.chat_bubble, color: AppTheme.cyan),
+            selectedIcon: Icon(Icons.chat_bubble, color: u.accent),
             label: 'Chats',
           ),
           NavigationDestination(
             icon: const Icon(Icons.campaign_outlined),
-            selectedIcon: Icon(Icons.campaign, color: AppTheme.cyan),
+            selectedIcon: Icon(Icons.campaign, color: u.accent),
             label: 'Channels',
           ),
           NavigationDestination(
             icon: const Icon(Icons.groups_outlined),
-            selectedIcon: Icon(Icons.groups, color: AppTheme.cyan),
+            selectedIcon: Icon(Icons.groups, color: u.accent),
             label: 'Groups',
           ),
           NavigationDestination(
             icon: const Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person, color: AppTheme.cyan),
+            selectedIcon: Icon(Icons.person, color: u.accent),
             label: 'Profile',
           ),
         ],
+        ),
       ),
     );
   }

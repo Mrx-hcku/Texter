@@ -63,20 +63,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _statCard(String value, String label) {
+    final u = UiPalette.of(context);
     return Expanded(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: AppTheme.surface,
+          color: u.card,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppTheme.surfaceLight),
+          border: Border.all(color: u.border),
         ),
         child: Column(
           children: [
-            Text(value, style: AppTheme.heading(size: 20, color: AppTheme.cyan)),
+            Text(value, style: AppTheme.heading(size: 20, color: u.accent)),
             const SizedBox(height: 2),
-            Text(label, style: AppTheme.body(size: 11, color: AppTheme.textSecondary)),
+            Text(label, style: AppTheme.body(size: 11, color: u.subtext)),
           ],
         ),
       ),
@@ -84,16 +85,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _tile(IconData icon, String label, {VoidCallback? onTap, Color? color}) {
+    final u = UiPalette.of(context);
     return ListTile(
-      leading: Icon(icon, color: color ?? AppTheme.cyan),
-      title: Text(label, style: AppTheme.body(color: color ?? Colors.white, weight: FontWeight.w500)),
-      trailing: const Icon(Icons.chevron_right, size: 18, color: AppTheme.textSecondary),
+      leading: Icon(icon, color: color ?? u.accent),
+      title: Text(label, style: AppTheme.body(color: color ?? u.text, weight: FontWeight.w500)),
+      trailing: Icon(Icons.chevron_right, size: 18, color: u.subtext),
       onTap: onTap,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final u = UiPalette.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
       body: _loading
@@ -106,7 +109,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     children: [
                       CircleAvatar(
                         radius: 44,
-                        backgroundColor: AppTheme.surfaceLight,
+                        backgroundColor: u.cardAlt,
                         backgroundImage: _avatarUrl.isNotEmpty ? CachedNetworkImageProvider(_avatarUrl) : null,
                         // Agar avatar URL 404/broken ho (file delete ho chuki ho DB
                         // reference bacha ho), toh silently ignore karo — crash nahi.
@@ -114,16 +117,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: _avatarUrl.isEmpty
                             ? Text(
                                 _name.isNotEmpty ? _name[0].toUpperCase() : '?',
-                                style: AppTheme.heading(size: 32, color: Colors.white70),
+                                style: AppTheme.heading(size: 32, color: u.subtext),
                               )
                             : null,
                       ),
                       const SizedBox(height: 12),
-                      Text('@$_name', style: AppTheme.heading(size: 18)),
+                      Text('@$_name', style: AppTheme.heading(size: 18, color: u.accent)),
                       const SizedBox(height: 4),
                       Text(
                         _status.isNotEmpty ? _status : _email,
-                        style: AppTheme.body(size: 12.5, color: AppTheme.textSecondary),
+                        style: AppTheme.body(size: 12.5, color: u.subtext),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -138,18 +141,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 20),
                 Container(
-                  decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
+                  decoration: BoxDecoration(color: u.card, borderRadius: BorderRadius.circular(16), border: Border.all(color: u.border)),
                   child: Column(
                     children: [
                       _tile(Icons.account_circle_outlined, 'Account', onTap: () async {
                         await Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen()));
                         _load();
                       }),
-                      Divider(height: 1, color: AppTheme.surfaceLight),
+                      Divider(height: 1, color: u.border),
                       _tile(Icons.notifications_outlined, 'Notifications', onTap: () {
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
                       }),
-                      Divider(height: 1, color: AppTheme.surfaceLight),
+                      Divider(height: 1, color: u.border),
                       _tile(Icons.lock_outline, 'Privacy', onTap: () {
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyScreen()));
                       }),
@@ -158,7 +161,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 20),
                 Container(
-                  decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
+                  decoration: BoxDecoration(color: u.card, borderRadius: BorderRadius.circular(16), border: Border.all(color: u.border)),
                   child: _tile(Icons.logout, 'Logout', color: AppTheme.pink, onTap: _logout),
                 ),
               ],

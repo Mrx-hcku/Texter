@@ -19,6 +19,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
   bool _loading = true;
   String? _myId;
   final Set<String> _joining = {};
+  int _tab = 0; // 0 = my groups, 1 = discover
   RealtimeSubscription? _sub;
 
   @override
@@ -73,43 +74,180 @@ class _GroupsScreenState extends State<GroupsScreen> {
     }
   }
 
-  Widget _groupTile(GroupModel g, {required bool isMember}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        leading: CircleAvatar(
-          radius: 22,
-          backgroundColor: AppTheme.surfaceLight,
-          child: Text(g.name.isNotEmpty ? g.name[0].toUpperCase() : '?', style: AppTheme.heading(size: 15, color: Colors.white70)),
-        ),
-        title: Text(g.name, style: AppTheme.body(size: 15, weight: FontWeight.w600, color: Colors.white)),
-        subtitle: Text(
-          '${g.memberIds.length} members${g.isPublic ? '' : ' · Private'}',
-          style: AppTheme.body(size: 12, color: AppTheme.textSecondary),
-        ),
-        trailing: isMember
-            ? const Icon(Icons.chevron_right, color: AppTheme.textSecondary)
-            : ElevatedButton(
-                onPressed: _joining.contains(g.id) ? null : () => _join(g),
-                style: ElevatedButton.styleFrom(minimumSize: const Size(70, 34), padding: EdgeInsets.zero),
-                child: _joining.contains(g.id)
-                    ? SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.bg))
-                    : const Text('Join'),
+  void _openGroup(GroupModel g) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => GroupChatScreen(groupId: g.id, groupName: g.name)),
+    );
+  }
+
+  /// Pill switch: "My groups" | "Discover".
+  Widget _switcher(UiPalette u, bool dark) {
+    Widget chip(int i, String label, int count) {
+      final sel = _tab == i;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _tab = i),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: sel ? u.accent : Colors.transparent,
+              borderRadius: BorderRadius.circular(26),
+            ),
+            child: Center(
+              child: Text(
+                '$label · $count',
+                style: AppTheme.body(
+                  size: 13,
+                  weight: FontWeight.w700,
+                  color: sel ? (dark ? Colors.black : Colors.white) : u.subtext,
+                ),
               ),
-        onTap: isMember
-            ? () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => GroupChatScreen(groupId: g.id, groupName: g.name)),
-                )
-            : null,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(4, 8, 4, 14),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: u.cardAlt,
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: u.border),
+      ),
+      child: Row(children: [
+        chip(0, 'My groups', _myGroups.length),
+        chip(1, 'Discover', _discoverGroups.length),
+      ]),
+    );
+  }
+
+  /// Every group gets its own colour family, a big watermark letter,
+  /// member count and (for public groups you haven't joined) a Join button.
+  Widget _groupCard(GroupModel g, {required bool isMember, required bool dark}) {
+    final colors = NameTint.gradient(g.name, dark);
+    final ink = dark ? Colors.white : const Color(0xFF1C262B);
+    final inkSoft = ink.withOpacity(0.7);
+    final initial = g.name.isNotEmpty ? g.name[0].toUpperCase() : '?';
+    final joining = _joining.contains(g.id);
+    final btnText = dark ? Colors.black : Colors.white;
+    return GestureDetector(
+      onTap: isMember ? () => _openGroup(g) : null,
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: dark ? Colors.white10 : Colors.black12),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              right: -8,
+              bottom: -24,
+              child: Text(
+                initial,
+                style: TextStyle(fontSize: 120, fontWeight: FontWeight.w900, color: ink.withOpacity(0.08)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: ink.withOpacity(0.12)),
+                        alignment: Alignment.center,
+                        child: Text(initial, style: AppTheme.heading(size: 16, color: ink)),
+                      ),
+                      const Spacer(),
+                      if (!g.isPublic) Icon(Icons.lock_rounded, size: 16, color: inkSoft),
+                    ],
+                  ),
+                  const Spacer(),
+                  Text(
+                    g.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.body(size: 16, weight: FontWeight.w700, color: ink),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.people_alt_rounded, size: 14, color: inkSoft),
+                      const SizedBox(width: 4),
+                      Text('${g.memberIds.length} members', style: AppTheme.body(size: 12, color: inkSoft)),
+                    ],
+                  ),
+                  if (!isMember) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 34,
+                      child: ElevatedButton(
+                        onPressed: joining ? null : () => _join(g),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(0, 34),
+                          padding: EdgeInsets.zero,
+                          backgroundColor: ink,
+                          foregroundColor: btnText,
+                        ),
+                        child: joining
+                            ? SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2, color: btnText))
+                            : const Text('Join'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _createCard(UiPalette u) {
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateGroupScreen()));
+        _load();
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: u.accent.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: u.accent.withOpacity(0.5), width: 1.5),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_circle_outline_rounded, size: 36, color: u.accent),
+            const SizedBox(height: 8),
+            Text('New group', style: AppTheme.body(size: 14, weight: FontWeight.w700, color: u.accent)),
+          ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final u = UiPalette.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final showMine = _tab == 0;
+    final list = showMine ? _myGroups : _discoverGroups;
+    final cards = <Widget>[
+      if (showMine) _createCard(u),
+      ...list.map((g) => _groupCard(g, isMember: showMine, dark: dark)),
+    ];
     return Scaffold(
       appBar: AppBar(
         title: const Text('Groups'),
@@ -119,33 +257,30 @@ class _GroupsScreenState extends State<GroupsScreen> {
         })],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.cyan))
+          ? Center(child: CircularProgressIndicator(color: u.accent))
           : RefreshIndicator(
               onRefresh: _load,
-              backgroundColor: AppTheme.surface,
-              color: AppTheme.cyan,
+              backgroundColor: u.card,
+              color: u.accent,
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 children: [
-                  if (_myGroups.isEmpty && _discoverGroups.isEmpty)
+                  _switcher(u, dark),
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 0.78,
+                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 24),
+                    children: cards,
+                  ),
+                  if (!showMine && list.isEmpty)
                     Padding(
-                      padding: const EdgeInsets.only(top: 60),
-                      child: Center(child: Text('No groups yet — create one!', style: AppTheme.body(color: AppTheme.textSecondary))),
+                      padding: const EdgeInsets.only(top: 24),
+                      child: Center(child: Text('No public groups to discover right now', style: AppTheme.body(color: u.subtext))),
                     ),
-                  if (_myGroups.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-                      child: Text('MY GROUPS', style: AppTheme.body(size: 12, weight: FontWeight.w700, color: AppTheme.cyan)),
-                    ),
-                    ..._myGroups.map((g) => _groupTile(g, isMember: true)),
-                  ],
-                  if (_discoverGroups.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-                      child: Text('DISCOVER PUBLIC GROUPS', style: AppTheme.body(size: 12, weight: FontWeight.w700, color: AppTheme.pink)),
-                    ),
-                    ..._discoverGroups.map((g) => _groupTile(g, isMember: false)),
-                  ],
                 ],
               ),
             ),

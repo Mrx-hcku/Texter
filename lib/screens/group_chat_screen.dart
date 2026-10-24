@@ -22,8 +22,7 @@ import '../services/net_utils.dart';
 import '../widgets/media_compose_sheet.dart';
 import 'media_viewer_screen.dart';
 import 'forward_screen.dart';
-import 'package:floaty_chatheads/floaty_chatheads.dart';
-import '../chathead_overlay.dart';
+import '../chat_bubble.dart';
 
 class GroupChatScreen extends StatefulWidget {
   final String groupId;
@@ -75,9 +74,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   bool _loadingOlder = false;
   bool _noMoreOlder = false;
 
+  late final ChatBubbleWatcher _bubbleWatcher;
+
   @override
   void initState() {
     super.initState();
+    _bubbleWatcher = ChatBubbleWatcher(chatId: widget.groupId, kind: 'group', chatName: widget.groupName)..start(context);
     _init();
     AdsService.showInterstitial();
     _player.onPlayerComplete.listen((_) {
@@ -88,6 +90,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   @override
   void dispose() {
+    _bubbleWatcher.stop();
     _outboxTimer?.cancel();
     _sub?.close();
     _recorder.dispose();
@@ -615,32 +618,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
-  /// Telegram-style "chat head": shrinks this group chat into a small
-  /// floating bubble that stays on top of whatever app the person switches to.
-  Future<void> _minimizeToChatHead() async {
-    final hasPermission = await FloatyChatheads.checkPermission();
-    if (!hasPermission) {
-      final granted = await FloatyChatheads.requestPermission();
-      if (!granted) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Allow "Display over other apps" to use chat bubbles')),
-        );
-        return;
-      }
-    }
-    await FloatyChatheads.showChatHead(
-      entryPoint: 'chatHeadOverlayMain',
-      iconWidget: CircleAvatar(
-        backgroundColor: AppTheme.cyan,
-        child: Text(widget.groupName.isNotEmpty ? widget.groupName[0].toUpperCase() : '?', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-      ),
-      notification: const NotificationConfig(title: 'Texter bubble is active'),
-    );
-    await FloatyChatheads.shareData({'chatId': widget.groupId, 'kind': 'group', 'chatName': widget.groupName});
-    if (mounted) Navigator.pop(context);
-  }
-
   void _showMessageOptions(MessageModel m, Offset tapPosition) {
     if (m.id.startsWith('local_')) return; // still sending / waiting for internet
     // Admins can delete anyone's message and pin; regular members only
@@ -706,6 +683,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final p = ChatPalette.of(context);
     final feed = <Widget>[];
     for (int i = 0; i < _messages.length; i++) {
       final m = _messages[i];
@@ -730,14 +708,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               placeholder: (context, url) => Container(
                 height: 150,
                 width: 200,
-                color: AppTheme.surfaceLight,
+                color: p.panel,
                 child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan)),
               ),
               errorWidget: (context, url, error) => Container(
                 height: 150,
                 width: 200,
                 padding: const EdgeInsets.all(12),
-                color: AppTheme.surfaceLight,
+                color: p.panel,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -762,7 +740,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             child: Container(
               width: 200,
               height: 150,
-              color: AppTheme.surfaceLight,
+              color: p.panel,
               child: const Center(child: Icon(Icons.play_circle_fill, color: Colors.white, size: 44)),
             ),
           ),
@@ -772,24 +750,24 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
-              icon: Icon(_playingId == m.id ? Icons.pause_circle : Icons.play_circle, color: mine ? Colors.white : AppTheme.cyan, size: 30),
+              icon: Icon(_playingId == m.id ? Icons.pause_circle : Icons.play_circle, color: mine ? p.mineText : p.accent, size: 30),
               onPressed: () => _togglePlay(m),
               padding: EdgeInsets.zero,
             ),
-            Text(m.text.isNotEmpty ? m.text : 'Voice', style: const TextStyle(color: Colors.white)),
+            Text(m.text.isNotEmpty ? m.text : 'Voice', style: TextStyle(color: mine ? p.mineText : p.otherText)),
           ],
         );
       } else if (m.attachmentType == 'file' && m.attachmentUrl.isNotEmpty) {
         content = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.insert_drive_file, color: mine ? Colors.white70 : AppTheme.cyan),
+            Icon(Icons.insert_drive_file, color: mine ? p.mineText.withOpacity(0.7) : p.accent),
             const SizedBox(width: 6),
-            Flexible(child: Text(m.text.isNotEmpty ? m.text : 'File', style: const TextStyle(color: Colors.white))),
+            Flexible(child: Text(m.text.isNotEmpty ? m.text : 'File', style: TextStyle(color: mine ? p.mineText : p.otherText))),
           ],
         );
       } else {
-        content = Text(m.text, style: const TextStyle(color: Colors.white));
+        content = Text(m.text, style: TextStyle(color: mine ? p.mineText : p.otherText));
       }
 
       final isSelected = _selectedIds.contains(m.id);
@@ -830,14 +808,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
             decoration: BoxDecoration(
-              color: isSelected ? AppTheme.cyan.withOpacity(0.18) : (mine ? const Color(0xFF1E222B) : AppTheme.surface),
+              color: isSelected ? AppTheme.cyan.withOpacity(0.18) : (mine ? p.mineBubble : p.otherBubble),
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(16),
                 topRight: const Radius.circular(16),
                 bottomLeft: Radius.circular(mine ? 16 : 4),
                 bottomRight: Radius.circular(mine ? 4 : 16),
               ),
-              border: Border.all(color: isSelected ? AppTheme.cyan : const Color(0xFF2A2E39), width: 1),
+              border: Border.all(color: isSelected ? AppTheme.cyan : (mine ? p.mineBorder : p.otherBorder), width: 1),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -887,9 +865,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
 
     return Scaffold(
+      backgroundColor: p.chatBg,
       appBar: _isSelectionMode
           ? AppBar(
-              backgroundColor: AppTheme.surface,
+              backgroundColor: p.panel,
               leading: IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => _selectedIds.clear())),
               title: Text('${_selectedIds.length}'),
               actions: [IconButton(icon: const Icon(Icons.delete_outline), onPressed: _deleteSelected)],
@@ -897,7 +876,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           : AppBar(
               title: Text(widget.groupName),
               actions: [
-                IconButton(icon: const Icon(Icons.picture_in_picture_alt_outlined), tooltip: 'Minimize to bubble', onPressed: _minimizeToChatHead),
               ],
             ),
       body: _loading
@@ -907,7 +885,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 if (_pinnedMessage != null)
                   Container(
                     width: double.infinity,
-                    color: AppTheme.surfaceLight,
+                    color: p.panel,
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     child: Row(
                       children: [
@@ -918,7 +896,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             'Pinned: ${_pinnedMessage!.text.isNotEmpty ? _pinnedMessage!.text : 'Attachment'}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppTheme.body(size: 12.5, color: Colors.white),
+                            style: AppTheme.body(size: 12.5, color: p.inputText),
                           ),
                         ),
                         if (_isAdmin)
@@ -949,10 +927,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           ],
                         ),
                 ),
-                if (_uploading) LinearProgressIndicator(minHeight: 2, color: AppTheme.cyan, backgroundColor: AppTheme.surface),
+                if (_uploading) LinearProgressIndicator(minHeight: 2, color: AppTheme.cyan, backgroundColor: p.panel),
                 if (_recording)
                   Container(
-                    color: AppTheme.surface,
+                    color: p.panel,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     child: Row(
                       children: [
@@ -960,7 +938,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         const SizedBox(width: 8),
                         Text(
                           '${_recordDuration.inMinutes}:${(_recordDuration.inSeconds % 60).toString().padLeft(2, '0')}',
-                          style: AppTheme.body(color: Colors.white),
+                          style: AppTheme.body(color: p.inputText),
                         ),
                         const Spacer(),
                         TextButton(onPressed: () => _stopRecording(send: false), child: Text('Cancel', style: TextStyle(color: AppTheme.textSecondary))),
@@ -988,7 +966,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         Expanded(
                           child: Container(
                             decoration: BoxDecoration(
-                              color: const Color(0xFF1E222B),
+                              color: p.inputBar,
                               borderRadius: BorderRadius.circular(28),
                             ),
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -999,10 +977,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                 Expanded(
                                   child: TextField(
                                     controller: _controller,
-                                    style: AppTheme.body(color: Colors.white),
-                                    decoration: const InputDecoration(
+                                    style: AppTheme.body(color: p.inputText),
+                                    decoration: InputDecoration(
                                       hintText: 'Message',
-                                      hintStyle: TextStyle(color: Colors.grey),
+                                      hintStyle: TextStyle(color: p.inputHint),
                                       border: InputBorder.none,
                                       enabledBorder: InputBorder.none,
                                       focusedBorder: InputBorder.none,
@@ -1013,7 +991,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                 ),
                                 _attachIcon(Icons.photo_library, _pickMultipleMedia),
                                 _attachIcon(Icons.attach_file, _pickFile),
-                                _attachIcon(Icons.mic, _startRecording, color: const Color(0xFF00E5FF)),
+                                _attachIcon(Icons.mic, _startRecording, color: p.accent),
                               ],
                             ),
                           ),
