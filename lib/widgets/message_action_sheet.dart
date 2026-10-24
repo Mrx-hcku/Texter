@@ -32,6 +32,7 @@ Future<void> showMessageActionSheet(
     context: context,
     barrierColor: Colors.black54,
     builder: (context) {
+      final p = ChatPalette.of(context);
       return Stack(
         children: [
           // Background dismiss detector
@@ -54,9 +55,9 @@ Future<void> showMessageActionSheet(
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF161922),
+                      color: p.sheet,
                       borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: const Color(0xFF2A2E39), width: 1),
+                      border: Border.all(color: p.sheetBorder, width: 1),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.4),
@@ -90,11 +91,11 @@ Future<void> showMessageActionSheet(
                           borderRadius: BorderRadius.circular(20),
                           child: Container(
                             padding: const EdgeInsets.all(8),
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: Color(0xFF232733),
+                              color: p.sheetChip,
                             ),
-                            child: const Icon(Icons.add, color: Colors.white70, size: 20),
+                            child: Icon(Icons.add, color: p.sheetIcon, size: 20),
                           ),
                         ),
                       ],
@@ -105,9 +106,9 @@ Future<void> showMessageActionSheet(
                   Container(
                     width: 210,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF161922),
+                      color: p.sheet,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFF2A2E39), width: 1),
+                      border: Border.all(color: p.sheetBorder, width: 1),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.5),
@@ -202,9 +203,11 @@ Widget _buildActionItem({
   required IconData icon,
   required String label,
   required VoidCallback onTap,
-  Color textColor = Colors.white,
-  Color iconColor = Colors.white70,
+  Color? textColor,
+  Color? iconColor,
 }) {
+  return Builder(builder: (context) {
+  final p = ChatPalette.of(context);
   return InkWell(
     onTap: onTap,
     child: Padding(
@@ -215,16 +218,17 @@ Widget _buildActionItem({
           Text(
             label,
             style: TextStyle(
-              color: textColor,
+              color: textColor ?? p.sheetText,
               fontSize: 15,
               fontWeight: FontWeight.w500,
             ),
           ),
-          Icon(icon, color: iconColor, size: 20),
+          Icon(icon, color: iconColor ?? p.sheetIcon, size: 20),
         ],
       ),
     ),
   );
+  });
 }
 
 /// Opens the full emoji picker in a bottom sheet with a dark theme matching background
@@ -232,7 +236,7 @@ Future<String?> showFullEmojiPicker(BuildContext context) async {
   String? selected;
   await showModalBottomSheet(
     context: context,
-    backgroundColor: const Color(0xFF161922),
+    backgroundColor: ChatPalette.of(context).sheet,
     builder: (ctx) => SizedBox(
       height: 300,
       child: EmojiPicker(
@@ -252,8 +256,8 @@ Future<bool> confirmDeleteMessages(BuildContext context, int count) async {
   final result = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      backgroundColor: const Color(0xFF161922),
-      title: Text(count > 1 ? 'Delete $count messages?' : 'Delete message?', style: AppTheme.heading(size: 16, color: Colors.white)),
+      backgroundColor: ChatPalette.of(ctx).sheet,
+      title: Text(count > 1 ? 'Delete $count messages?' : 'Delete message?', style: AppTheme.heading(size: 16, color: ChatPalette.of(ctx).sheetText)),
       content: Text(
         'This cannot be undone — it will be removed for everyone.',
         style: AppTheme.body(color: AppTheme.textSecondary),

@@ -62,7 +62,7 @@ Future<MediaComposeResult?> showMediaComposeSheet(BuildContext context, List<Pic
   return showModalBottomSheet<MediaComposeResult>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AppTheme.surface,
+    backgroundColor: ChatPalette.of(context).panel,
     builder: (ctx) => _MediaComposeBody(initialFiles: accepted),
   );
 }
@@ -121,6 +121,7 @@ class _MediaComposeBodyState extends State<_MediaComposeBody> {
 
   @override
   Widget build(BuildContext context) {
+    final p = ChatPalette.of(context);
     if (_files.isEmpty) return const SizedBox.shrink();
     final current = _files[_selectedIndex];
 
@@ -135,7 +136,7 @@ class _MediaComposeBodyState extends State<_MediaComposeBody> {
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
               child: Row(
                 children: [
-                  IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
+                  IconButton(icon: Icon(Icons.close, color: p.inputText), onPressed: () => Navigator.pop(context)),
                   Text('${_files.length}/$kMaxMediaFiles', style: AppTheme.body(color: AppTheme.textSecondary)),
                 ],
               ),
@@ -198,7 +199,7 @@ class _MediaComposeBodyState extends State<_MediaComposeBody> {
                                   ? Container(
                                       width: 52,
                                       height: 52,
-                                      color: AppTheme.surfaceLight,
+                                      color: p.panel,
                                       child: const Icon(Icons.videocam, color: Colors.white54, size: 20),
                                     )
                                   : Image.file(f.file, width: 52, height: 52, fit: BoxFit.cover),
@@ -230,11 +231,11 @@ class _MediaComposeBodyState extends State<_MediaComposeBody> {
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14),
-                      decoration: BoxDecoration(color: AppTheme.surfaceLight, borderRadius: BorderRadius.circular(24)),
+                      decoration: BoxDecoration(color: p.panel, borderRadius: BorderRadius.circular(24)),
                       child: TextField(
                         controller: _captionController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(hintText: 'Add a caption...', hintStyle: TextStyle(color: AppTheme.textSecondary), border: InputBorder.none),
+                        style: TextStyle(color: p.inputText),
+                        decoration: InputDecoration(hintText: 'Add a caption...', hintStyle: TextStyle(color: p.inputHint), border: InputBorder.none),
                       ),
                     ),
                   ),

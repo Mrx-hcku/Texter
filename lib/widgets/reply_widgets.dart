@@ -26,8 +26,9 @@ class ReplyComposerBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ChatPalette.of(context);
     return Container(
-      color: AppTheme.surface,
+      color: p.panel,
       padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
       child: Row(
         children: [
@@ -41,14 +42,14 @@ class ReplyComposerBar extends StatelessWidget {
                   'Replying to $senderName',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppTheme.cyan, fontSize: 12.5, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: p.accent, fontSize: 12.5, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   snippet,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 12.5),
+                  style: TextStyle(color: p.quoteText, fontSize: 12.5),
                 ),
               ],
             ),
@@ -80,6 +81,7 @@ class ReplyQuote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ChatPalette.of(context);
     final unavailable = original == null;
     return GestureDetector(
       onTap: unavailable ? null : onTap,
@@ -87,7 +89,7 @@ class ReplyQuote extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.22),
+          color: p.quoteBg,
           borderRadius: BorderRadius.circular(8),
           border: const Border(left: BorderSide(color: AppTheme.cyan, width: 3)),
         ),
@@ -99,7 +101,7 @@ class ReplyQuote extends StatelessWidget {
               unavailable ? 'Message' : senderName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppTheme.cyan, fontSize: 12, fontWeight: FontWeight.w600),
+              style: TextStyle(color: p.accent, fontSize: 12, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 2),
             Text(
@@ -107,7 +109,7 @@ class ReplyQuote extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: Colors.grey.shade300,
+                color: p.quoteText,
                 fontSize: 12.5,
                 fontStyle: unavailable ? FontStyle.italic : FontStyle.normal,
               ),
@@ -128,17 +130,18 @@ class EditComposerBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ChatPalette.of(context);
     return Container(
-      color: AppTheme.surface,
+      color: p.panel,
       padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
       child: Row(
         children: [
-          const Icon(Icons.edit, size: 18, color: AppTheme.cyan),
+          Icon(Icons.edit, size: 18, color: p.accent),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               'Editing message',
-              style: const TextStyle(color: AppTheme.cyan, fontSize: 12.5, fontWeight: FontWeight.w600),
+              style: TextStyle(color: p.accent, fontSize: 12.5, fontWeight: FontWeight.w600),
             ),
           ),
           IconButton(

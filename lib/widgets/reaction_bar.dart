@@ -18,6 +18,7 @@ class ReactionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (reactions.isEmpty) return const SizedBox.shrink();
+    final p = ChatPalette.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Wrap(
@@ -32,7 +33,7 @@ class ReactionBar extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
-                color: mine ? AppTheme.cyan.withOpacity(0.22) : AppTheme.surfaceLight,
+                color: mine ? AppTheme.cyan.withOpacity(0.22) : p.panel,
                 borderRadius: BorderRadius.circular(12),
                 border: mine ? Border.all(color: AppTheme.cyan, width: 1) : null,
               ),
@@ -44,7 +45,7 @@ class ReactionBar extends StatelessWidget {
                     const SizedBox(width: 3),
                     Text(
                       '${users.length}',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade300, fontWeight: FontWeight.w600),
+                      style: TextStyle(fontSize: 11, color: p.quoteText, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ],
