@@ -74,11 +74,39 @@ Future<void> _showChatNotification(Map<String, dynamic> data) async {
   if (chatId.isEmpty) return;
 
   final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
   final countKey = 'unread_count_$chatId';
   final newCount = (prefs.getInt(countKey) ?? 0) + 1;
   await prefs.setInt(countKey, newCount);
 
   final payload = jsonEncode({'chatId': chatId, 'kind': kind, 'chatName': chatName, 'senderId': senderId});
+
+  // Android 11+: WhatsApp-style — one conversation notification per chat
+  // (with its recent messages), all chats grouped under one "Texter" summary.
+  // Older Android keeps the per-chat grouping + summary as before.
+  final bubblesOk = await TexterBubble.isSupported();
+
+  var history = <Map<String, dynamic>>[];
+  if (bubblesOk) {
+    try {
+      final raw = prefs.getString('msg_history_$chatId');
+      if (raw != null) {
+        history = (jsonDecode(raw) as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+    } catch (_) {}
+    history.add({
+      'text': body,
+      'time': DateTime.now().millisecondsSinceEpoch,
+      'sender': senderName.isNotEmpty ? senderName : title,
+    });
+    if (history.length > 8) history = history.sublist(history.length - 8);
+    await prefs.setString('msg_history_$chatId', jsonEncode(history));
+    final chats = prefs.getStringList('unread_chats') ?? <String>[];
+    if (!chats.contains(chatId)) {
+      chats.add(chatId);
+      await prefs.setStringList('unread_chats', chats);
+    }
+  }
 
   final messageDetails = AndroidNotificationDetails(
     _notifyChannelId,
@@ -86,7 +114,7 @@ Future<void> _showChatNotification(Map<String, dynamic> data) async {
     channelDescription: 'New message notifications',
     importance: Importance.high,
     priority: Priority.high,
-    groupKey: chatId,
+    groupKey: bubblesOk ? _messagesGroupKey : chatId,
     actions: [
       const AndroidNotificationAction(
         'reply',
@@ -96,7 +124,7 @@ Future<void> _showChatNotification(Map<String, dynamic> data) async {
       const AndroidNotificationAction('mark_read', 'Mark as read'),
     ],
   );
-  final notifId = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+  final notifId = bubblesOk ? chatId.hashCode : DateTime.now().millisecondsSinceEpoch.remainder(100000);
   await _localNotifications.show(
     notifId,
     title,
@@ -105,34 +133,76 @@ Future<void> _showChatNotification(Map<String, dynamic> data) async {
     payload: payload,
   );
 
-  // Summary notification — required for Android to actually group the
-  // individual ones together into one collapsed entry per chat.
-  final summaryDetails = AndroidNotificationDetails(
-    _notifyChannelId,
-    'Messages',
-    channelDescription: 'New message notifications',
-    importance: Importance.high,
-    priority: Priority.high,
-    groupKey: chatId,
-    setAsGroupSummary: true,
-    styleInformation: const DefaultStyleInformation(true, true),
-  );
-  await _localNotifications.show(
-    chatId.hashCode,
-    chatName,
-    newCount > 1 ? '$newCount new messages' : body,
-    NotificationDetails(android: summaryDetails),
-    payload: payload,
-  );
+  if (!bubblesOk) {
+    // Summary notification — required for Android to actually group the
+    // individual ones together into one collapsed entry per chat.
+    final summaryDetails = AndroidNotificationDetails(
+      _notifyChannelId,
+      'Messages',
+      channelDescription: 'New message notifications',
+      importance: Importance.high,
+      priority: Priority.high,
+      groupKey: chatId,
+      setAsGroupSummary: true,
+      styleInformation: const DefaultStyleInformation(true, true),
+    );
+    await _localNotifications.show(
+      chatId.hashCode,
+      chatName,
+      newCount > 1 ? '$newCount new messages' : body,
+      NotificationDetails(android: summaryDetails),
+      payload: payload,
+    );
+    return;
+  }
 
-  // Android "Bubble" button on the notification (Android 11+), with the
-  // chat partner's profile picture saved earlier by ChatBubble.cacheAvatar.
+  // Real conversation notification: Bubble button, profile pic, message history.
   await TexterBubble.attach(
     id: notifId,
     chatId: chatId,
     kind: kind,
     chatName: chatName,
+    senderName: senderName.isNotEmpty ? senderName : title,
+    body: body,
+    messages: history,
     avatarPath: prefs.getString('avatar_path_$chatId'),
+  );
+  await _refreshSummary(prefs);
+}
+
+const String _messagesGroupKey = 'texter_messages';
+const int _summaryNotifId = 1;
+
+/// The single "Texter — N new messages from M chats" entry that all chat
+/// notifications collapse under (like WhatsApp). Silent: only the chat
+/// notifications themselves make a sound.
+Future<void> _refreshSummary(SharedPreferences prefs) async {
+  final chats = prefs.getStringList('unread_chats') ?? <String>[];
+  if (chats.isEmpty) {
+    await _localNotifications.cancel(_summaryNotifId);
+    return;
+  }
+  var total = 0;
+  for (final c in chats) {
+    total += prefs.getInt('unread_count_$c') ?? 0;
+  }
+  final details = AndroidNotificationDetails(
+    _notifyChannelId,
+    'Messages',
+    channelDescription: 'New message notifications',
+    importance: Importance.high,
+    priority: Priority.high,
+    groupKey: _messagesGroupKey,
+    setAsGroupSummary: true,
+    groupAlertBehavior: GroupAlertBehavior.children,
+    onlyAlertOnce: true,
+    styleInformation: const DefaultStyleInformation(true, true),
+  );
+  await _localNotifications.show(
+    _summaryNotifId,
+    'Texter',
+    chats.length > 1 ? '$total new messages from ${chats.length} chats' : '$total new messages',
+    NotificationDetails(android: details),
   );
 }
 
@@ -140,8 +210,13 @@ Future<void> _showChatNotification(Map<String, dynamic> data) async {
 /// chat has actually been opened or marked read.
 Future<void> _clearChatNotificationState(String chatId) async {
   final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
   await prefs.remove('unread_count_$chatId');
+  await prefs.remove('msg_history_$chatId');
+  final chats = prefs.getStringList('unread_chats') ?? <String>[];
+  if (chats.remove(chatId)) await prefs.setStringList('unread_chats', chats);
   await _localNotifications.cancel(chatId.hashCode);
+  if (await TexterBubble.isSupported()) await _refreshSummary(prefs);
 }
 
 /// Authenticated REST call using the JWT AppwriteService.refreshJwt() keeps
@@ -226,11 +301,17 @@ void _handleNotificationResponse(NotificationResponse response) {
   if (chatId.isEmpty) return;
 
   if (response.actionId == 'reply') {
-    _sendReplyFromNotification(chatId, response.input ?? '');
-    return; // keep the notification — WhatsApp/Telegram do too
+    // Remove the notification once the reply is sent, otherwise Android keeps
+    // showing the "sending" spinner on it forever.
+    _sendReplyFromNotification(chatId, response.input ?? '').whenComplete(() {
+      if (response.id != null) _localNotifications.cancel(response.id!);
+      _clearChatNotificationState(chatId);
+    });
+    return;
   }
   if (response.actionId == 'mark_read') {
     _markReadFromNotification(chatId, kind);
+    if (response.id != null) _localNotifications.cancel(response.id!);
     _clearChatNotificationState(chatId);
     return;
   }
