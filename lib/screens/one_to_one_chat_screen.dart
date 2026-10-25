@@ -21,6 +21,8 @@ import 'media_viewer_screen.dart';
 import 'forward_screen.dart';
 import 'dart:io';
 import '../chat_bubble.dart';
+import 'package:texter_video/texter_video.dart';
+import '../widgets/media_expiry.dart';
 import '../services/chat_state_service.dart';
 
 class OneToOneChatScreen extends StatefulWidget {
@@ -38,7 +40,10 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
   List<MessageModel> _messages = [];
   String? _myId;
   RealtimeSubscription? _sub;
-  bool _uploading = false;
+  final Set<String> _activeUploads = {};
+  final Set<String> _cancelledUploads = {};
+  final Set<String> _compressing = {}; // videos being shrunk before upload
+  bool get _uploading => _activeUploads.isNotEmpty;
 
   final _recorder = AudioRecorder();
   bool _recording = false;
@@ -380,77 +385,268 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
     }
   }
 
-  Future<void> _sendMedia({required String path, required String fileName, required String type, String text = ''}) async {
-    if (_myId == null) return;
-    setState(() => _uploading = true);
+  // ---------- sending photos / files (Telegram style) ----------
+  // The photo or file shows up in the chat right away with a round
+  // progress + X badge. Tap it -> "Cancel sending".
+
+  String _addPendingMedia({required String path, required String type, required String text, required String replyId}) {
+    final localId = 'local_media_${DateTime.now().microsecondsSinceEpoch}';
+    final pending = MessageModel(
+      id: localId,
+      chatId: widget.chatId,
+      senderId: _myId!,
+      text: text,
+      createdAt: DateTime.now(),
+      status: 'pending',
+      replyToId: replyId,
+      attachmentUrl: path,
+      attachmentType: type,
+    );
+    if (mounted) setState(() => _messages.add(pending));
+    _scrollToBottom();
+    return localId;
+  }
+
+  Future<void> _uploadPendingMedia({
+    required String localId,
+    required String path,
+    required String fileName,
+    required String type,
+    required String text,
+    required String replyId,
+  }) async {
+    if (_cancelledUploads.contains(localId)) {
+      _cancelledUploads.remove(localId);
+      return;
+    }
+    if (mounted) setState(() => _activeUploads.add(localId));
+    String? tempPath;
     try {
-      final url = await AppwriteService.instance.uploadFile(path, fileName);
+      var uploadPath = path;
+      var uploadName = fileName;
+      if (type == 'file' && await File(path).length() > kMaxFileBytes) {
+        _rejectMedia(localId, 'File is too big (max 50 MB).');
+        return;
+      }
+      if (type == 'video') {
+        // Shrink the video first (like WhatsApp / Telegram); falls back to the original.
+        if (mounted) setState(() => _compressing.add(localId));
+        final small = await TexterVideo.compress(path, jobId: localId);
+        if (mounted) setState(() => _compressing.remove(localId));
+        if (_cancelledUploads.contains(localId)) return;
+        if (small != null) {
+          tempPath = small;
+          uploadPath = small;
+          final dot = fileName.lastIndexOf('.');
+          uploadName = '${dot > 0 ? fileName.substring(0, dot) : fileName}.mp4';
+        } else if (await File(path).length() > kMaxUncompressedVideoBytes) {
+          _rejectMedia(localId, 'Could not compress this video and it is too large (over 50 MB). Pick a shorter one.');
+          return;
+        }
+      }
+      final url = await AppwriteService.instance.uploadFile(uploadPath, uploadName);
+      if (_cancelledUploads.contains(localId)) return;
       final doc = await AppwriteService.instance.sendMessage(
         chatId: widget.chatId,
         senderId: _myId!,
         text: text,
         attachmentUrl: url,
         attachmentType: type,
-        replyToId: _replyingTo?.id ?? '',
+        replyToId: replyId,
       );
-      if (mounted) setState(() => _replyingTo = null);
-      if (!_messages.any((m) => m.id == doc.$id)) {
-        final msg = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
-        if (mounted) {
-          setState(() => _messages.add(msg));
-          _scrollToBottom();
-        }
-        LocalDbService.instance.cacheMessage(widget.chatId, msg);
+      if (_cancelledUploads.contains(localId)) return;
+      final real = MessageModel.fromMap(doc.data..addAll({'\$id': doc.$id, '\$createdAt': doc.$createdAt}));
+      LocalDbService.instance.cacheMessage(widget.chatId, real);
+      if (mounted) {
+        setState(() {
+          _messages.removeWhere((m) => m.id == localId);
+          if (!_messages.any((m) => m.id == real.id)) _messages.add(real);
+        });
+        _scrollToBottom();
       }
     } catch (e) {
-      if (!mounted) return;
+      if (_cancelledUploads.contains(localId) || !mounted) return;
+      setState(() => _messages.removeWhere((m) => m.id == localId));
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to upload: ${NetErr.friendly(e)}')));
     } finally {
-      if (mounted) setState(() => _uploading = false);
+      _activeUploads.remove(localId);
+      _cancelledUploads.remove(localId);
+      _compressing.remove(localId);
+      final tp = tempPath;
+      if (tp != null) {
+        try {
+          File(tp).delete();
+        } catch (_) {}
+      }
+      if (mounted) setState(() {});
     }
   }
 
+  Future<void> _sendMedia({required String path, required String fileName, required String type, String text = ''}) async {
+    if (_myId == null) return;
+    final replyId = _replyingTo?.id ?? '';
+    if (replyId.isNotEmpty && mounted) setState(() => _replyingTo = null);
+    final localId = _addPendingMedia(path: path, type: type, text: text, replyId: replyId);
+    await _uploadPendingMedia(localId: localId, path: path, fileName: fileName, type: type, text: text, replyId: replyId);
+  }
+
+  void _rejectMedia(String localId, String message) {
+    if (!mounted) return;
+    setState(() => _messages.removeWhere((m) => m.id == localId));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _cancelUpload(String localId) {
+    _cancelledUploads.add(localId);
+    TexterVideo.cancel(localId);
+    _activeUploads.remove(localId);
+    if (!mounted) return;
+    setState(() => _messages.removeWhere((m) => m.id == localId));
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('Sending cancelled'), duration: Duration(seconds: 2)));
+  }
+
+  void _showCancelSending(MessageModel m) {
+    final pal = ChatPalette.of(context);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: pal.sheet,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (ctx) => SafeArea(
+        child: ListTile(
+          leading: Icon(Icons.delete_outline, color: pal.sheetText),
+          title: Text('Cancel sending', style: TextStyle(color: pal.sheetText, fontSize: 16)),
+          onTap: () {
+            Navigator.pop(ctx);
+            _cancelUpload(m.id);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _pendingMediaView(MessageModel m, ChatPalette p) {
+    final Widget base;
+    if (m.attachmentType == 'image') {
+      base = Image.file(
+        File(m.attachmentUrl),
+        width: 200,
+        height: 150,
+        fit: BoxFit.cover,
+        cacheWidth: 400,
+        errorBuilder: (_, __, ___) => Container(width: 200, height: 150, color: p.panel),
+      );
+    } else {
+      final icon = m.attachmentType == 'video'
+          ? Icons.videocam_rounded
+          : m.attachmentType == 'voice'
+              ? Icons.mic_rounded
+              : Icons.insert_drive_file_rounded;
+      base = Container(width: 200, height: 150, color: p.panel, child: Center(child: Icon(icon, size: 42, color: p.accent)));
+    }
+    return GestureDetector(
+      onTap: () => _showCancelSending(m),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 200,
+          height: 150,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned.fill(child: base),
+              Container(
+                width: 52,
+                height: 52,
+                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                child: const Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(width: 46, height: 46, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)),
+                    Icon(Icons.close_rounded, color: Colors.white, size: 24),
+                  ],
+                ),
+              ),
+              if (_compressing.contains(m.id))
+                Positioned(
+                  bottom: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
+                    child: const Text('Compressing…', style: TextStyle(color: Colors.white, fontSize: 11)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Camera: take a photo, add a caption, send.
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
-    final file = await picker.pickImage(source: source);
-    if (file == null) return;
-    await _sendMedia(path: file.path, fileName: file.name, type: 'image');
+    final file = await ChatBubble.guard(() => picker.pickImage(source: source, maxWidth: kImageMaxSide, maxHeight: kImageMaxSide, imageQuality: kImageQuality));
+    if (file == null || !mounted) return;
+    final result = await showMediaComposeSheet(context, [PickedMedia(File(file.path), false)]);
+    if (result == null) return;
+    await _sendMultipleMedia(result);
   }
 
+  /// Documents: pick, optional caption, send.
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(withData: false);
-    if (result == null || result.files.single.path == null) return;
-    await _sendMedia(path: result.files.single.path!, fileName: result.files.single.name, type: 'file', text: result.files.single.name);
+    final result = await ChatBubble.guard(() => FilePicker.platform.pickFiles(withData: false));
+    if (result == null || result.files.single.path == null || !mounted) return;
+    final f = result.files.single;
+    final caption = await showFileCaptionDialog(context, f.name);
+    if (caption == null) return;
+    final text = caption.isEmpty ? f.name : '${f.name}\n$caption';
+    await _sendMedia(path: f.path!, fileName: f.name, type: 'file', text: text);
   }
-
-  static const _videoExtensions = ['.mp4', '.mov', '.3gp', '.mkv', '.webm', '.avi', '.m4v'];
-  bool _looksLikeVideo(String path) => _videoExtensions.any((ext) => path.toLowerCase().endsWith(ext));
 
   /// Gallery button: pick up to 5 photos/videos together, preview them
   /// WhatsApp/Telegram style, then upload + send one message per file.
   Future<void> _pickMultipleMedia() async {
     final picker = ImagePicker();
-    final picked = await picker.pickMultipleMedia(limit: kMaxMediaFiles);
-    if (picked.isEmpty) return;
+    final picked = await ChatBubble.guard(
+      () => picker.pickMultipleMedia(limit: kMaxMediaFiles, maxWidth: kImageMaxSide, maxHeight: kImageMaxSide, imageQuality: kImageQuality),
+    );
+    if (picked.isEmpty || !mounted) return;
     final files = picked.map((x) => PickedMedia(File(x.path), _looksLikeVideo(x.path))).toList();
-    if (!mounted) return;
     final result = await showMediaComposeSheet(context, files);
     if (result == null) return;
     await _sendMultipleMedia(result);
   }
 
+  /// All selected files appear in the chat immediately, then upload one by one.
   Future<void> _sendMultipleMedia(MediaComposeResult result) async {
+    if (_myId == null) return;
+    final replyId = _replyingTo?.id ?? '';
+    if (replyId.isNotEmpty && mounted) setState(() => _replyingTo = null);
+    final jobs = <Map<String, String>>[];
     for (var i = 0; i < result.files.length; i++) {
       final f = result.files[i];
-      final caption = i == 0 ? result.caption : '';
-      await _sendMedia(
-        path: f.file.path,
-        fileName: f.file.path.split('/').last,
-        type: f.isVideo ? 'video' : 'image',
-        text: caption,
+      final type = f.isVideo ? 'video' : 'image';
+      final text = i == 0 ? result.caption : '';
+      final reply = i == 0 ? replyId : '';
+      final id = _addPendingMedia(path: f.file.path, type: type, text: text, replyId: reply);
+      jobs.add({'id': id, 'path': f.file.path, 'type': type, 'text': text, 'reply': reply});
+    }
+    for (final j in jobs) {
+      await _uploadPendingMedia(
+        localId: j['id']!,
+        path: j['path']!,
+        fileName: j['path']!.split('/').last,
+        type: j['type']!,
+        text: j['text']!,
+        replyId: j['reply']!,
       );
     }
   }
+
+  static const _videoExtensions = ['.mp4', '.mov', '.3gp', '.mkv', '.webm', '.avi', '.m4v'];
+  bool _looksLikeVideo(String path) => _videoExtensions.any((ext) => path.toLowerCase().endsWith(ext));
 
   Future<void> _startRecording() async {
     if (!await _recorder.hasPermission()) {
@@ -665,7 +861,11 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                 final m = _messages[_messages.length - 1 - i];
                 final mine = m.senderId == _myId;
                 Widget content;
-                if (m.attachmentType == 'image' && m.attachmentUrl.isNotEmpty) {
+                if (m.id.startsWith('local_media_')) {
+                  content = _pendingMediaView(m, p);
+                } else if (isMediaExpired(type: m.attachmentType, url: m.attachmentUrl, createdAt: m.createdAt)) {
+                  content = expiredMediaView(p, mine);
+                } else if (m.attachmentType == 'image' && m.attachmentUrl.isNotEmpty) {
                   content = GestureDetector(
                     onTap: () => Navigator.push(context, MaterialPageRoute(
                       builder: (_) => MediaViewerScreen(url: m.attachmentUrl, isVideo: false, caption: m.text),
@@ -674,6 +874,7 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                       borderRadius: BorderRadius.circular(8),
                       child: CachedNetworkImage(
                         imageUrl: m.attachmentUrl,
+                        memCacheWidth: 500,
                         width: 200,
                         fit: BoxFit.cover,
                         placeholder: (context, url) => Container(
@@ -742,6 +943,11 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                   );
                 } else {
                   content = Text(m.text, style: TextStyle(color: mine ? p.mineText : p.otherText));
+                }
+                if ((m.attachmentType == 'video' || m.attachmentType == 'file') &&
+                    !m.id.startsWith('local_') &&
+                    !isMediaExpired(type: m.attachmentType, url: m.attachmentUrl, createdAt: m.createdAt)) {
+                  content = withExpiryNote(content, p, mine, m.createdAt);
                 }
                 final isSelected = _selectedIds.contains(m.id);
 
