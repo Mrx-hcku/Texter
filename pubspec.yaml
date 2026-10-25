@@ -32,6 +32,8 @@ dependencies:
   floaty_chatheads: ^2.0.0
   texter_bubble:
     path: packages/texter_bubble
+  texter_video:
+    path: packages/texter_video
   video_player: ^2.9.2
   photo_view: ^0.15.0
 
