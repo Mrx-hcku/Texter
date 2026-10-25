@@ -21,6 +21,22 @@ class ChatBubble {
   /// notifications.
   static bool isBubbleEngine = false;
 
+  static int _suppress = 0;
+
+  /// Wrap gallery / camera / file pickers with this. While a picker is open the
+  /// app is "in background", and starting the floating-bubble engine at that
+  /// moment can get the app killed on low-memory phones.
+  static Future<T> guard<T>(Future<T> Function() action) async {
+    _suppress++;
+    try {
+      return await action();
+    } finally {
+      Future.delayed(const Duration(seconds: 1), () {
+        if (_suppress > 0) _suppress--;
+      });
+    }
+  }
+
   /// Saves the chat partner's profile picture on the phone so bubbles
   /// (floating + notification) can show it, even when the app is closed.
   static Future<void> cacheAvatar(String chatId, Map<String, dynamic> userData) async {
@@ -68,6 +84,7 @@ class ChatBubble {
     required String kind,
     required String chatName,
   }) async {
+    if (_suppress > 0) return;
     try {
       if (!await FloatyChatheads.checkPermission()) return;
       final info = {'chatId': chatId, 'kind': kind, 'chatName': chatName};
