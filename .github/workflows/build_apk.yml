@@ -23,28 +23,43 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Create texter_bubble native plugin (notification Bubble button)
+      - name: Create native plugins (texter_bubble = notification Bubble, texter_video = video compression)
         run: |
-          if [ ! -d "packages/texter_bubble" ]; then
-            flutter create --no-pub --template=plugin --platforms=android -a kotlin --org com.texter packages/texter_bubble
-          fi
+          for P in texter_bubble texter_video; do
+            if [ ! -d "packages/$P" ]; then
+              flutter create --no-pub --template=plugin --platforms=android -a kotlin --org com.texter packages/$P
+            fi
+          done
           python3 - <<'PY'
           import re, glob
-          base = "packages/texter_bubble"
-          kts = glob.glob(base + "/android/src/main/kotlin/**/*Plugin.kt", recursive=True)
-          assert len(kts) == 1, kts
-          old = open(kts[0]).read()
-          pkg = re.search(r"^package\s+([\w.]+)", old, re.M).group(1)
-          cls = re.search(r"^class\s+(\w+)", old, re.M).group(1)
-          tpl = open("android_overrides/TexterBubblePlugin.kt").read()
-          open(kts[0], "w").write(tpl.replace("__PKG__", pkg).replace("__CLASS__", cls))
-          open(base + "/lib/texter_bubble.dart", "w").write(open("android_overrides/texter_bubble.dart").read())
-          for g in glob.glob(base + "/android/build.gradle*"):
-              c = open(g).read()
-              c = re.sub(r"(minSdk(?:Version)?)(\s*=\s*|\s+)\d+", r"\g<1>\g<2>23", c)
-              c = re.sub(r"(compileSdk(?:Version)?)(\s*=\s*|\s+)flutter\.compileSdkVersion", r"\g<1>\g<2>36", c)
-              open(g, "w").write(c)
-          print("texter_bubble plugin ready:", pkg, cls)
+          plugins = [
+              ("texter_bubble", "TexterBubblePlugin.kt", "texter_bubble.dart", []),
+              ("texter_video", "TexterVideoPlugin.kt", "texter_video.dart", [
+                  "androidx.media3:media3-transformer:1.4.1",
+                  "androidx.media3:media3-effect:1.4.1",
+                  "androidx.media3:media3-common:1.4.1",
+              ]),
+          ]
+          for name, kt_tpl, dart_tpl, deps in plugins:
+              base = "packages/" + name
+              kts = glob.glob(base + "/android/src/main/kotlin/**/*Plugin.kt", recursive=True)
+              assert len(kts) == 1, kts
+              old = open(kts[0]).read()
+              pkg = re.search(r"^package\s+([\w.]+)", old, re.M).group(1)
+              cls = re.search(r"^class\s+(\w+)", old, re.M).group(1)
+              tpl = open("android_overrides/" + kt_tpl).read()
+              open(kts[0], "w").write(tpl.replace("__PKG__", pkg).replace("__CLASS__", cls))
+              open(base + "/lib/" + name + ".dart", "w").write(open("android_overrides/" + dart_tpl).read())
+              for g in glob.glob(base + "/android/build.gradle*"):
+                  c = open(g).read()
+                  c = re.sub(r"(minSdk(?:Version)?)(\s*=\s*|\s+)\d+", r"\g<1>\g<2>23", c)
+                  c = re.sub(r"(compileSdk(?:Version)?)(\s*=\s*|\s+)flutter\.compileSdkVersion", r"\g<1>\g<2>36", c)
+                  if deps:
+                      lines = "".join('    implementation("%s")\n' % d for d in deps)
+                      c, n = re.subn(r"^dependencies\s*\{\n", lambda m: m.group(0) + lines, c, count=1, flags=re.M)
+                      assert n == 1, "no top-level dependencies block in " + g
+                  open(g, "w").write(c)
+              print("plugin ready:", name, pkg, cls)
           PY
 
       - name: Scaffold missing android/ platform folder
