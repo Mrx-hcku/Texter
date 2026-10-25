@@ -4,7 +4,15 @@ import 'package:video_player/video_player.dart';
 import '../config/theme.dart';
 
 const int kMaxMediaFiles = 5;
-const int kMaxMediaBytes = 30 * 1024 * 1024; // 30 MB
+const int kMaxMediaBytes = 30 * 1024 * 1024; // 30 MB (photos)
+const int kMaxVideoBytes = 200 * 1024 * 1024; // 200 MB (videos are compressed before upload)
+const int kMaxUncompressedVideoBytes = 50 * 1024 * 1024; // if compression fails, original must be under this
+const int kMaxFileBytes = 50 * 1024 * 1024; // documents
+
+/// Photos are shrunk before upload (like WhatsApp / Telegram): longest side
+/// 1600 px, JPEG quality 80 — usually 150-400 KB instead of 3-8 MB.
+const double kImageMaxSide = 1600;
+const int kImageQuality = 80;
 
 class PickedMedia {
   final File file;
@@ -32,7 +40,7 @@ Future<(List<PickedMedia>, String)> _applyLimits(List<PickedMedia> picked) async
       continue;
     }
     final size = await p.file.length();
-    if (size > kMaxMediaBytes) {
+    if (size > (p.isVideo ? kMaxVideoBytes : kMaxMediaBytes)) {
       droppedForSize++;
       continue;
     }
@@ -40,7 +48,7 @@ Future<(List<PickedMedia>, String)> _applyLimits(List<PickedMedia> picked) async
   }
   final parts = <String>[];
   if (droppedForCount > 0) parts.add('max $kMaxMediaFiles files at a time');
-  if (droppedForSize > 0) parts.add('$droppedForSize file${droppedForSize > 1 ? 's were' : ' was'} over 30MB');
+  if (droppedForSize > 0) parts.add('$droppedForSize file${droppedForSize > 1 ? 's were' : ' was'} too large (photos 30MB, videos 200MB)');
   return (accepted, parts.join(' — '));
 }
 
@@ -165,7 +173,7 @@ class _MediaComposeBodyState extends State<_MediaComposeBody> {
                             ],
                           )
                         : const Center(child: CircularProgressIndicator(color: AppTheme.cyan)))
-                    : Image.file(current.file, fit: BoxFit.contain),
+                    : Image.file(current.file, fit: BoxFit.contain, cacheWidth: 1080),
               ),
             ),
             // Thumbnail strip
@@ -202,7 +210,7 @@ class _MediaComposeBodyState extends State<_MediaComposeBody> {
                                       color: p.panel,
                                       child: const Icon(Icons.videocam, color: Colors.white54, size: 20),
                                     )
-                                  : Image.file(f.file, width: 52, height: 52, fit: BoxFit.cover),
+                                  : Image.file(f.file, width: 52, height: 52, fit: BoxFit.cover, cacheWidth: 160),
                             ),
                             Positioned(
                               top: -6,
@@ -255,4 +263,49 @@ class _MediaComposeBodyState extends State<_MediaComposeBody> {
       ),
     );
   }
+}
+
+
+/// Small "Send file" dialog: shows the file name and an optional caption.
+/// Returns the caption ('' if empty), or null if cancelled.
+Future<String?> showFileCaptionDialog(BuildContext context, String fileName) {
+  final p = ChatPalette.of(context);
+  final controller = TextEditingController();
+  return showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: p.sheet,
+      title: Text('Send file', style: AppTheme.heading(size: 17, color: p.sheetText)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.insert_drive_file_rounded, color: p.accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(fileName, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.sheetText)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: controller,
+            style: TextStyle(color: p.sheetText),
+            decoration: InputDecoration(hintText: 'Add a caption...', hintStyle: TextStyle(color: p.inputHint)),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Files and videos are deleted automatically after 3 days.',
+            style: TextStyle(color: p.sheetIcon, fontSize: 11.5),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: TextStyle(color: p.sheetIcon))),
+        TextButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: Text('Send', style: TextStyle(color: p.accent))),
+      ],
+    ),
+  );
 }
