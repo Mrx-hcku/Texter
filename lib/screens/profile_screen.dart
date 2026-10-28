@@ -54,6 +54,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout() async {
+    // Go offline BEFORE the session is deleted, otherwise the green dot stays on forever.
+    try {
+      final me = await AppwriteService.instance.getCurrentUser();
+      if (me != null) await AppwriteService.instance.updateOnlineStatus(me.$id, false);
+    } catch (_) {}
     await AppwriteService.instance.logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(

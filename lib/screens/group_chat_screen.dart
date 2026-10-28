@@ -25,6 +25,9 @@ import 'forward_screen.dart';
 import '../chat_bubble.dart';
 import 'package:texter_video/texter_video.dart';
 import '../widgets/media_expiry.dart';
+import '../widgets/media_album.dart';
+import '../widgets/texter_ui.dart';
+import 'group_info_screen.dart';
 
 class GroupChatScreen extends StatefulWidget {
   final String groupId;
@@ -42,6 +45,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   String? _myId;
   bool _loading = true;
   bool _isAdmin = false;
+  bool _onlyAdminsSend = false; // admin control: members can only read
+  bool _isMember = true;
+  String _avatarUrl = '';
+  String _groupName = '';
+  int _memberCount = 0;
+  RealtimeSubscription? _groupSub;
+  String get _title => _groupName.isEmpty ? widget.groupName : _groupName;
   MessageModel? _pinnedMessage;
   final Map<String, String> _senderNames = {};
   RealtimeSubscription? _sub;
@@ -98,6 +108,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     _bubbleWatcher.stop();
     _outboxTimer?.cancel();
     _sub?.close();
+    _groupSub?.close();
     _recorder.dispose();
     _player.dispose();
     _scrollController.removeListener(_onScroll);
@@ -173,8 +184,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     // 2) Group info (admin / pinned). The cached copy is used when offline.
     try {
       final groupDoc = await AppwriteService.instance.getGroupDoc(widget.groupId);
-      final adminIds = List<String>.from(groupDoc.data['adminIds'] ?? []);
-      _isAdmin = _myId != null && adminIds.contains(_myId);
+      _applyGroupDoc(groupDoc);
       final pinnedId = groupDoc.data['pinnedMessageId'] as String?;
       if (pinnedId != null && pinnedId.isNotEmpty) {
         final pinnedDoc = await AppwriteService.instance.getMessageById(pinnedId);
@@ -193,6 +203,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         }
       }
       if (mounted) setState(() {});
+      // live: admin changed a setting / name / photo / members
+      _groupSub ??= AppwriteService.instance.subscribeToCollection(AppwriteConfig.groupsCollection, (doc, events) {
+        if (doc.$id != widget.groupId || !mounted) return;
+        if (events.any((e) => e.contains('delete'))) {
+          Navigator.maybePop(context);
+          return;
+        }
+        setState(() => _applyGroupDoc(doc));
+      });
     } catch (_) {}
 
     // 3) Sponsored ads (cached copy when offline)
@@ -378,6 +397,41 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
+  void _applyGroupDoc(dynamic doc) {
+    final g = GroupModel.fromMap(doc.data..addAll({'\$id': doc.$id}));
+    _isAdmin = _myId != null && g.adminIds.contains(_myId);
+    _onlyAdminsSend = g.onlyAdminsSend;
+    _isMember = _myId == null || g.memberIds.contains(_myId);
+    _avatarUrl = g.avatarUrl;
+    _groupName = g.name;
+    _memberCount = g.memberIds.length;
+  }
+
+  Future<void> _openGroupInfo() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => GroupInfoScreen(groupId: widget.groupId)));
+  }
+
+  /// Replaces the message box when the person cannot write here.
+  Widget _lockedBar(ChatPalette p, String text) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        decoration: BoxDecoration(color: p.panel, borderRadius: BorderRadius.circular(30), border: Border.all(color: p.otherBorder)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_rounded, size: 17, color: p.accent),
+            const SizedBox(width: 8),
+            Flexible(child: Text(text, style: TextStyle(color: p.inputHint, fontSize: 13))),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _send() async {
     if (_editingMessage != null) {
       await _saveEdit();
@@ -385,6 +439,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
     final text = _controller.text.trim();
     if (text.isEmpty || _myId == null) return;
+    if (!_isMember || (_onlyAdminsSend && !_isAdmin)) return;
     _controller.clear();
     final replyId = _replyingTo?.id ?? '';
     final localId = 'local_${DateTime.now().microsecondsSinceEpoch}';
@@ -536,6 +591,30 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (replyId.isNotEmpty && mounted) setState(() => _replyingTo = null);
     final localId = _addPendingMedia(path: path, type: type, text: text, replyId: replyId);
     await _uploadPendingMedia(localId: localId, path: path, fileName: fileName, type: type, text: text, replyId: replyId);
+  }
+
+  /// Opens the viewer on [m] — and lets the user swipe through every
+  /// photo / video of this chat (Telegram style).
+  void _openViewer(MessageModel m) {
+    final list = _messages
+        .where((x) =>
+            !x.id.startsWith('local_') &&
+            (x.attachmentType == 'image' || x.attachmentType == 'video') &&
+            x.attachmentUrl.isNotEmpty &&
+            !isMediaExpired(type: x.attachmentType, url: x.attachmentUrl, createdAt: x.createdAt))
+        .toList();
+    final idx = list.indexWhere((x) => x.id == m.id);
+    if (idx < 0) return;
+    final items = list
+        .map((x) => MediaViewerItem(
+              url: x.attachmentUrl,
+              isVideo: x.attachmentType == 'video',
+              caption: x.text,
+              title: x.senderId == _myId ? 'You' : (_senderNames[x.senderId] ?? widget.groupName),
+              time: x.createdAt,
+            ))
+        .toList();
+    Navigator.push(context, MaterialPageRoute(builder: (_) => MediaViewerScreen(items: items, initialIndex: idx)));
   }
 
   void _rejectMedia(String localId, String message) {
@@ -883,8 +962,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   Widget build(BuildContext context) {
     final p = ChatPalette.of(context);
     final feed = <Widget>[];
-    for (int i = 0; i < _messages.length; i++) {
-      final m = _messages[i];
+    final entries = buildAlbumEntries(_messages);
+    for (int i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final m = entry.main;
       final mine = m.senderId == _myId;
       final senderName = mine ? '' : (_senderNames[m.senderId] ?? '');
       final isUnavailable = m.text.contains('[Message unavailable');
@@ -892,15 +973,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       Widget content;
       if (isUnavailable) {
         content = Text(m.text, style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic));
+      } else if (entry.isAlbum) {
+        content = buildAlbumView(items: entry.items, p: p, onOpen: _openViewer, onPendingTap: _showCancelSending);
       } else if (m.id.startsWith('local_media_')) {
         content = _pendingMediaView(m, p);
       } else if (isMediaExpired(type: m.attachmentType, url: m.attachmentUrl, createdAt: m.createdAt)) {
         content = expiredMediaView(p, mine);
       } else if (m.attachmentType == 'image' && m.attachmentUrl.isNotEmpty) {
         content = GestureDetector(
-          onTap: () => Navigator.push(context, MaterialPageRoute(
-            builder: (_) => MediaViewerScreen(url: m.attachmentUrl, isVideo: false, caption: m.text),
-          )),
+          onTap: () => _openViewer(m),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: CachedNetworkImage(
@@ -935,9 +1016,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         );
       } else if (m.attachmentType == 'video' && m.attachmentUrl.isNotEmpty) {
         content = GestureDetector(
-          onTap: () => Navigator.push(context, MaterialPageRoute(
-            builder: (_) => MediaViewerScreen(url: m.attachmentUrl, isVideo: true, caption: m.text),
-          )),
+          onTap: () => _openViewer(m),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: Container(
@@ -972,7 +1051,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       } else {
         content = Text(m.text, style: TextStyle(color: mine ? p.mineText : p.otherText));
       }
+      if ((m.attachmentType == 'image' || m.attachmentType == 'video') &&
+              m.text.trim().isNotEmpty &&
+              !isMediaExpired(type: m.attachmentType, url: m.attachmentUrl, createdAt: m.createdAt)) {
+            content = withCaption(content, m.text, mine ? p.mineText : p.otherText);
+          }
       if ((m.attachmentType == 'video' || m.attachmentType == 'file') &&
+          !entry.isAlbum &&
           !m.id.startsWith('local_') &&
           !isMediaExpired(type: m.attachmentType, url: m.attachmentUrl, createdAt: m.createdAt)) {
         content = withExpiryNote(content, p, mine, m.createdAt);
@@ -1082,8 +1167,34 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               actions: [IconButton(icon: const Icon(Icons.delete_outline), onPressed: _deleteSelected)],
             )
           : AppBar(
-              title: Text(widget.groupName),
+              titleSpacing: 0,
+              title: InkWell(
+                onTap: _openGroupInfo,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      TexterAvatar(name: _title, url: _avatarUrl, size: 40, ring: true),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(
+                              _memberCount > 0 ? '$_memberCount members${_onlyAdminsSend ? ' · admins only' : ''}' : 'Tap for group info',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: p.inputHint),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               actions: [
+                IconButton(icon: const Icon(Icons.info_outline_rounded), tooltip: 'Group info', onPressed: _openGroupInfo),
               ],
             ),
       body: _loading
@@ -1135,7 +1246,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           ],
                         ),
                 ),
-                if (_uploading) LinearProgressIndicator(minHeight: 2, color: AppTheme.cyan, backgroundColor: p.panel),
                 if (_recording)
                   Container(
                     color: p.panel,
@@ -1165,6 +1275,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     snippet: messageSnippet(_replyingTo!),
                     onCancel: () => setState(() => _replyingTo = null),
                   ),
+                if (!_isMember)
+                  _lockedBar(p, 'You are no longer a member of this group')
+                else if (_onlyAdminsSend && !_isAdmin)
+                  _lockedBar(p, 'Only admins can send messages')
+                else
                 SafeArea(
                   child: Container(
                     color: Colors.transparent,

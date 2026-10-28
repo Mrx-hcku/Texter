@@ -23,6 +23,7 @@ import 'dart:io';
 import '../chat_bubble.dart';
 import 'package:texter_video/texter_video.dart';
 import '../widgets/media_expiry.dart';
+import '../widgets/media_album.dart';
 import '../services/chat_state_service.dart';
 
 class OneToOneChatScreen extends StatefulWidget {
@@ -490,6 +491,30 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
     await _uploadPendingMedia(localId: localId, path: path, fileName: fileName, type: type, text: text, replyId: replyId);
   }
 
+  /// Opens the viewer on [m] — and lets the user swipe through every
+  /// photo / video of this chat (Telegram style).
+  void _openViewer(MessageModel m) {
+    final list = _messages
+        .where((x) =>
+            !x.id.startsWith('local_') &&
+            (x.attachmentType == 'image' || x.attachmentType == 'video') &&
+            x.attachmentUrl.isNotEmpty &&
+            !isMediaExpired(type: x.attachmentType, url: x.attachmentUrl, createdAt: x.createdAt))
+        .toList();
+    final idx = list.indexWhere((x) => x.id == m.id);
+    if (idx < 0) return;
+    final items = list
+        .map((x) => MediaViewerItem(
+              url: x.attachmentUrl,
+              isVideo: x.attachmentType == 'video',
+              caption: x.text,
+              title: x.senderId == _myId ? 'You' : widget.chatName,
+              time: x.createdAt,
+            ))
+        .toList();
+    Navigator.push(context, MaterialPageRoute(builder: (_) => MediaViewerScreen(items: items, initialIndex: idx)));
+  }
+
   void _rejectMedia(String localId, String message) {
     if (!mounted) return;
     setState(() => _messages.removeWhere((m) => m.id == localId));
@@ -813,6 +838,7 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
   @override
   Widget build(BuildContext context) {
     final p = ChatPalette.of(context);
+    final entries = buildAlbumEntries(_messages);
     return Scaffold(
       backgroundColor: p.chatBg,
       appBar: _isSelectionMode
@@ -849,27 +875,28 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
               controller: _scrollController,
               reverse: true,
               padding: const EdgeInsets.all(12),
-              itemCount: _messages.length + (_loadingOlder ? 1 : 0),
+              itemCount: entries.length + (_loadingOlder ? 1 : 0),
               itemBuilder: (context, i) {
-                final itemCount = _messages.length + (_loadingOlder ? 1 : 0);
+                final itemCount = entries.length + (_loadingOlder ? 1 : 0);
                 if (_loadingOlder && i == itemCount - 1) {
                   return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
                     child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan))),
                   );
                 }
-                final m = _messages[_messages.length - 1 - i];
+                final entry = entries[entries.length - 1 - i];
+                final m = entry.main;
                 final mine = m.senderId == _myId;
                 Widget content;
-                if (m.id.startsWith('local_media_')) {
+                if (entry.isAlbum) {
+                  content = buildAlbumView(items: entry.items, p: p, onOpen: _openViewer, onPendingTap: _showCancelSending);
+                } else if (m.id.startsWith('local_media_')) {
                   content = _pendingMediaView(m, p);
                 } else if (isMediaExpired(type: m.attachmentType, url: m.attachmentUrl, createdAt: m.createdAt)) {
                   content = expiredMediaView(p, mine);
                 } else if (m.attachmentType == 'image' && m.attachmentUrl.isNotEmpty) {
                   content = GestureDetector(
-                    onTap: () => Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => MediaViewerScreen(url: m.attachmentUrl, isVideo: false, caption: m.text),
-                    )),
+                    onTap: () => _openViewer(m),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: CachedNetworkImage(
@@ -899,9 +926,7 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                   );
                 } else if (m.attachmentType == 'video' && m.attachmentUrl.isNotEmpty) {
                   content = GestureDetector(
-                    onTap: () => Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => MediaViewerScreen(url: m.attachmentUrl, isVideo: true, caption: m.text),
-                    )),
+                    onTap: () => _openViewer(m),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: Container(
@@ -944,7 +969,13 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
                 } else {
                   content = Text(m.text, style: TextStyle(color: mine ? p.mineText : p.otherText));
                 }
+                if ((m.attachmentType == 'image' || m.attachmentType == 'video') &&
+                        m.text.trim().isNotEmpty &&
+                        !isMediaExpired(type: m.attachmentType, url: m.attachmentUrl, createdAt: m.createdAt)) {
+                      content = withCaption(content, m.text, mine ? p.mineText : p.otherText);
+                    }
                 if ((m.attachmentType == 'video' || m.attachmentType == 'file') &&
+                    !entry.isAlbum &&
                     !m.id.startsWith('local_') &&
                     !isMediaExpired(type: m.attachmentType, url: m.attachmentUrl, createdAt: m.createdAt)) {
                   content = withExpiryNote(content, p, mine, m.createdAt);
@@ -1038,7 +1069,6 @@ class _OneToOneChatScreenState extends State<OneToOneChatScreen> {
               },
             ),
           ),
-          if (_uploading) LinearProgressIndicator(minHeight: 2, color: AppTheme.cyan, backgroundColor: p.panel),
           if (_recording)
             Container(
               color: p.panel,

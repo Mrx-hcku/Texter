@@ -5,6 +5,7 @@ import '../services/appwrite_service.dart';
 import '../models/models.dart';
 import 'group_chat_screen.dart';
 import 'create_group_screen.dart';
+import '../widgets/texter_ui.dart';
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({super.key});
@@ -60,15 +61,20 @@ class _GroupsScreenState extends State<GroupsScreen> {
     if (_myId == null || _joining.contains(g.id)) return;
     setState(() => _joining.add(g.id));
     try {
-      await AppwriteService.instance.joinGroup(groupId: g.id, userId: _myId!);
+      final result = await AppwriteService.instance.joinOrRequestGroup(groupId: g.id, userId: _myId!);
       if (!mounted) return;
+      if (result == 'requested') {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Request sent — an admin will approve you')));
+        _load();
+        return;
+      }
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => GroupChatScreen(groupId: g.id, groupName: g.name)),
       ).then((_) => _load());
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not join: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not join: ${friendlyError(e)}')));
     } finally {
       if (mounted) setState(() => _joining.remove(g.id));
     }
@@ -131,8 +137,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
     final colors = NameTint.gradient(g.name, dark);
     final ink = dark ? Colors.white : const Color(0xFF1C262B);
     final inkSoft = ink.withOpacity(0.7);
-    final initial = g.name.isNotEmpty ? g.name[0].toUpperCase() : '?';
     final joining = _joining.contains(g.id);
+    final requested = _myId != null && g.pendingIds.contains(_myId);
     final btnText = dark ? Colors.black : Colors.white;
     return GestureDetector(
       onTap: isMember ? () => _openGroup(g) : null,
@@ -145,14 +151,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
         ),
         child: Stack(
           children: [
-            Positioned(
-              right: -8,
-              bottom: -24,
-              child: Text(
-                initial,
-                style: TextStyle(fontSize: 120, fontWeight: FontWeight.w900, color: ink.withOpacity(0.08)),
-              ),
-            ),
+
             Padding(
               padding: const EdgeInsets.all(14),
               child: Column(
@@ -160,13 +159,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 children: [
                   Row(
                     children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(shape: BoxShape.circle, color: ink.withOpacity(0.12)),
-                        alignment: Alignment.center,
-                        child: Text(initial, style: AppTheme.heading(size: 16, color: ink)),
-                      ),
+                      TexterAvatar(name: g.name, url: g.avatarUrl, size: 40),
                       const Spacer(),
                       if (!g.isPublic) Icon(Icons.lock_rounded, size: 16, color: inkSoft),
                     ],
@@ -192,7 +185,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       width: double.infinity,
                       height: 34,
                       child: ElevatedButton(
-                        onPressed: joining ? null : () => _join(g),
+                        onPressed: (joining || requested) ? null : () => _join(g),
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(0, 34),
                           padding: EdgeInsets.zero,
@@ -201,7 +194,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         ),
                         child: joining
                             ? SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2, color: btnText))
-                            : const Text('Join'),
+                            : Text(requested ? 'Requested' : 'Join'),
                       ),
                     ),
                   ],
