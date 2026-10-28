@@ -1,8 +1,14 @@
 package __PKG__
 
+import android.annotation.TargetApi
+import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.Effect
@@ -66,7 +72,63 @@ class __CLASS__ : FlutterPlugin, MethodCallHandler {
                     result.success(null)
                 }
             }
+            "saveToGallery" -> result.success(
+                saveToGallery(call.argument<String>("path"), call.argument<String>("name"), call.argument<String>("mime"))
+            )
+            "shareText" -> result.success(shareText(call.argument<String>("text")))
             else -> result.notImplemented()
+        }
+    }
+
+    /** Copies a downloaded photo / video into the phone Gallery (Pictures/Texter, Movies/Texter). Android 10+. */
+    private fun saveToGallery(path: String?, name: String?, mime: String?): Boolean {
+        val ctx = context ?: return false
+        if (path == null || name == null || mime == null) return false
+        if (Build.VERSION.SDK_INT < 29) return false
+        return try {
+            saveQ(ctx, path, name, mime)
+        } catch (e: Throwable) {
+            false
+        }
+    }
+
+    @TargetApi(29)
+    private fun saveQ(ctx: Context, path: String, name: String, mime: String): Boolean {
+        val isVideo = mime.startsWith("video")
+        val values = ContentValues()
+        values.put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+        values.put(MediaStore.MediaColumns.MIME_TYPE, mime)
+        val dir = if (isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
+        values.put(MediaStore.MediaColumns.RELATIVE_PATH, dir + "/Texter")
+        values.put(MediaStore.MediaColumns.IS_PENDING, 1)
+        val collection = if (isVideo) {
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        }
+        val resolver = ctx.contentResolver
+        val uri = resolver.insert(collection, values) ?: return false
+        val out = resolver.openOutputStream(uri) ?: return false
+        out.use { o -> File(path).inputStream().use { it.copyTo(o) } }
+        values.clear()
+        values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+        return true
+    }
+
+    private fun shareText(text: String?): Boolean {
+        val ctx = context ?: return false
+        if (text == null) return false
+        return try {
+            val send = Intent(Intent.ACTION_SEND)
+            send.type = "text/plain"
+            send.putExtra(Intent.EXTRA_TEXT, text)
+            val chooser = Intent.createChooser(send, null)
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ctx.startActivity(chooser)
+            true
+        } catch (e: Throwable) {
+            false
         }
     }
 

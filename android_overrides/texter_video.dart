@@ -17,6 +17,24 @@ class TexterVideo {
     }
   }
 
+  /// Saves a downloaded photo/video into the Gallery. false on Android 9 and older.
+  static Future<bool> saveToGallery(String path, String name, String mime) async {
+    try {
+      return await _channel.invokeMethod<bool>('saveToGallery', {'path': path, 'name': name, 'mime': mime}) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Opens the Android share sheet with some text (e.g. a link).
+  static Future<bool> shareText(String text) async {
+    try {
+      return await _channel.invokeMethod<bool>('shareText', {'text': text}) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<void> cancel(String jobId) async {
     try {
       await _channel.invokeMethod('cancel', {'jobId': jobId});
