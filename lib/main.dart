@@ -540,14 +540,26 @@ class _TexterAppState extends State<TexterApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (ChatBubble.isBubbleEngine) return; // bubble window must not flip online/offline
-    _setOnline(state == AppLifecycleState.resumed);
+    // Like Telegram: online only while the app is open on screen.
+    // `inactive` (notification shade, dialogs) is ignored; leaving the app = offline.
+    if (state == AppLifecycleState.resumed) {
+      _setOnline(true);
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _setOnline(false);
+    }
   }
 
   Future<void> _setOnline(bool online) async {
     try {
       final user = await AppwriteService.instance.getCurrentUser();
       if (user != null) {
-        AppwriteService.instance.updateOnlineStatus(user.$id, online);
+        try {
+          await AppwriteService.instance.updateOnlineStatus(user.$id, online);
+        } catch (_) {
+          // one quick retry — the phone may be switching networks while it goes to background
+          await Future.delayed(const Duration(seconds: 1));
+          await AppwriteService.instance.updateOnlineStatus(user.$id, online);
+        }
         if (online) {
           AppwriteService.instance.registerPushTarget();
           AppwriteService.instance.listenForTokenRefresh();
