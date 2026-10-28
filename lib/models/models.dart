@@ -158,6 +158,14 @@ class GroupModel {
   final List<String> adminIds;
   final bool isPublic;
 
+  /// Admin controls (WhatsApp-style group permissions). All default to "off",
+  /// so groups created before these existed behave exactly as before.
+  final bool onlyAdminsSend; // members can read, only admins can write
+  final bool onlyAdminsEdit; // only admins can change name / photo / description
+  final bool onlyAdminsAdd; // only admins can add new members
+  final bool needApproval; // joining needs an admin's OK
+  final List<String> pendingIds; // people waiting for approval
+
   GroupModel({
     required this.id,
     required this.name,
@@ -166,6 +174,11 @@ class GroupModel {
     this.memberIds = const [],
     this.adminIds = const [],
     this.isPublic = true,
+    this.onlyAdminsSend = false,
+    this.onlyAdminsEdit = false,
+    this.onlyAdminsAdd = false,
+    this.needApproval = false,
+    this.pendingIds = const [],
   });
 
   factory GroupModel.fromMap(Map<String, dynamic> map) => GroupModel(
@@ -176,7 +189,17 @@ class GroupModel {
         memberIds: List<String>.from(map['memberIds'] ?? []),
         adminIds: List<String>.from(map['adminIds'] ?? []),
         isPublic: map['isPublic'] ?? true,
+        onlyAdminsSend: map['onlyAdminsSend'] == true,
+        onlyAdminsEdit: map['onlyAdminsEdit'] == true,
+        onlyAdminsAdd: map['onlyAdminsAdd'] == true,
+        needApproval: map['needApproval'] == true,
+        pendingIds: List<String>.from(map['pendingIds'] ?? []),
       );
+
+  bool isAdmin(String? userId) => userId != null && adminIds.contains(userId);
+
+  /// The person who made the group (first admin).
+  String get ownerId => adminIds.isNotEmpty ? adminIds.first : '';
 }
 
 class ChannelModel {
@@ -188,6 +211,14 @@ class ChannelModel {
   final int subscriberCount;
   final List<String> subscriberIds;
 
+  /// People allowed to post (WhatsApp-channel style: only admins post).
+  final List<String> adminIds;
+
+  /// Preview of the newest post, shown in the channel list.
+  final String lastMessage;
+  final String lastMessageAt; // ISO time string, '' if none
+  final String pinnedMessageId;
+
   ChannelModel({
     required this.id,
     required this.name,
@@ -196,17 +227,43 @@ class ChannelModel {
     this.creatorId = '',
     this.subscriberCount = 0,
     this.subscriberIds = const [],
+    this.adminIds = const [],
+    this.lastMessage = '',
+    this.lastMessageAt = '',
+    this.pinnedMessageId = '',
   });
 
-  factory ChannelModel.fromMap(Map<String, dynamic> map) => ChannelModel(
-        id: map['\$id'] ?? '',
-        name: map['name'] ?? '',
-        description: map['description'] ?? '',
-        avatarUrl: map['avatarUrl'] ?? '',
-        creatorId: map['creatorId'] ?? '',
-        subscriberCount: map['subscriberCount'] ?? 0,
-        subscriberIds: List<String>.from(map['subscriberIds'] ?? []),
-      );
+  factory ChannelModel.fromMap(Map<String, dynamic> map) {
+    final subs = List<String>.from(map['subscriberIds'] ?? []);
+    return ChannelModel(
+      id: map['\$id'] ?? '',
+      name: map['name'] ?? '',
+      description: map['description'] ?? '',
+      avatarUrl: map['avatarUrl'] ?? '',
+      creatorId: map['creatorId'] ?? '',
+      subscriberCount: (map['subscriberCount'] as num?)?.toInt() ?? subs.length,
+      subscriberIds: subs,
+      adminIds: List<String>.from(map['adminIds'] ?? []),
+      lastMessage: (map['lastMessage'] ?? '').toString(),
+      lastMessageAt: (map['lastMessageAt'] ?? '').toString(),
+      pinnedMessageId: (map['pinnedMessageId'] ?? '').toString(),
+    );
+  }
+
+  /// The channel's owner. Channels made before admin roles existed have no
+  /// creator saved — for those, the first subscriber is the one who made it.
+  String get ownerId {
+    if (creatorId.isNotEmpty) return creatorId;
+    if (adminIds.isNotEmpty) return adminIds.first;
+    return subscriberIds.isNotEmpty ? subscriberIds.first : '';
+  }
+
+  bool isOwner(String? userId) => userId != null && userId.isNotEmpty && ownerId == userId;
+
+  bool isAdmin(String? userId) {
+    if (userId == null || userId.isEmpty) return false;
+    return isOwner(userId) || adminIds.contains(userId);
+  }
 
   Map<String, dynamic> toMap() => {
         'name': name,
