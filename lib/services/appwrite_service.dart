@@ -27,6 +27,8 @@ class AppwriteService {
   late final Databases databases;
   late final Storage storage;
   late final Realtime realtime;
+  String? _adminJwt; // login token sent to the Texter server
+  DateTime? _adminJwtAt;
 
   /// Id of the FCM provider created in the Appwrite console (Messaging).
   static const String fcmProviderId = 'fcm-texter';
@@ -187,10 +189,12 @@ class AppwriteService {
   }
 
   Future<models.Session> login(String email, String password) {
+    _resetAdminJwt();
     return account.createEmailPasswordSession(email: email, password: password);
   }
 
   Future<void> logout() async {
+    _resetAdminJwt();
     await unregisterPushTarget();
     await clearJwt();
     await account.deleteSession(sessionId: 'current');
@@ -730,7 +734,7 @@ class AppwriteService {
     );
   }
 
-  Future<models.Document> createGroup({
+  Future<models.Document> _createGroupDirect({
     required String name,
     required String description,
     required List<String> memberIds,
@@ -752,7 +756,7 @@ class AppwriteService {
     );
   }
 
-  Future<void> joinGroup({required String groupId, required String userId}) async {
+  Future<void> _joinGroupDirect({required String groupId, required String userId}) async {
     final doc = await databases.getDocument(
       databaseId: AppwriteConfig.databaseId,
       collectionId: AppwriteConfig.groupsCollection,
@@ -768,7 +772,7 @@ class AppwriteService {
     );
   }
 
-  Future<void> leaveGroup({required String groupId, required String userId}) async {
+  Future<void> _leaveGroupDirect({required String groupId, required String userId}) async {
     final doc = await databases.getDocument(
       databaseId: AppwriteConfig.databaseId,
       collectionId: AppwriteConfig.groupsCollection,
@@ -797,7 +801,7 @@ class AppwriteService {
     );
   }
 
-  Future<void> pinMessage({required String groupId, required String messageId}) {
+  Future<void> _pinMessageDirect({required String groupId, required String messageId}) {
     return databases.updateDocument(
       databaseId: AppwriteConfig.databaseId,
       collectionId: AppwriteConfig.groupsCollection,
@@ -806,7 +810,7 @@ class AppwriteService {
     );
   }
 
-  Future<void> unpinMessage(String groupId) {
+  Future<void> _unpinMessageDirect(String groupId) {
     return databases.updateDocument(
       databaseId: AppwriteConfig.databaseId,
       collectionId: AppwriteConfig.groupsCollection,
@@ -845,26 +849,36 @@ class AppwriteService {
     );
   }
 
-  Future<models.Document> createChannel({
+  Future<models.Document> _createChannelDirect({
     required String name,
     required String description,
     required String creatorId,
-  }) {
-    return databases.createDocument(
-      databaseId: AppwriteConfig.databaseId,
-      collectionId: AppwriteConfig.channelsCollection,
-      documentId: ID.unique(),
-      data: {
-        'name': name,
-        'description': description,
-        'avatarUrl': '',
-        'subscriberCount': 1,
-        'subscriberIds': [creatorId],
-      },
-    );
+    String avatarUrl = '',
+  }) async {
+    final base = <String, dynamic>{
+      'name': name,
+      'description': description,
+      'avatarUrl': avatarUrl,
+      'subscriberCount': 1,
+      'subscriberIds': [creatorId],
+    };
+    Future<models.Document> create(Map<String, dynamic> data) => databases.createDocument(
+          databaseId: AppwriteConfig.databaseId,
+          collectionId: AppwriteConfig.channelsCollection,
+          documentId: ID.unique(),
+          data: data,
+        );
+    try {
+      return await create({...base, 'creatorId': creatorId, 'adminIds': [creatorId]});
+    } catch (e) {
+      // Old database without creatorId / adminIds yet: still create the channel
+      // (the first subscriber is then treated as its owner).
+      if (missingAttribute(e) != null) return create(base);
+      rethrow;
+    }
   }
 
-  Future<void> subscribeChannel({required String channelId, required String userId}) async {
+  Future<void> _subscribeChannelDirect({required String channelId, required String userId}) async {
     final doc = await databases.getDocument(
       databaseId: AppwriteConfig.databaseId,
       collectionId: AppwriteConfig.channelsCollection,
@@ -880,7 +894,7 @@ class AppwriteService {
     );
   }
 
-  Future<void> unsubscribeChannel({required String channelId, required String userId}) async {
+  Future<void> _unsubscribeChannelDirect({required String channelId, required String userId}) async {
     final doc = await databases.getDocument(
       databaseId: AppwriteConfig.databaseId,
       collectionId: AppwriteConfig.channelsCollection,
@@ -894,6 +908,380 @@ class AppwriteService {
       documentId: channelId,
       data: {'subscriberIds': subs, 'subscriberCount': subs.length},
     );
+  }
+
+
+  // ======================================================================
+  // SERVER-SIDE ADMIN RULES (Texter server on Render: POST /admin)
+  // Channels / Groups changes go through the server, which checks who is
+  // really allowed. Until adminServerUrl is filled in, the app falls back to
+  // writing directly so nothing breaks while you set it up.
+  // ======================================================================
+  /// Public address of your Render service (no trailing slash), e.g.
+  /// https://texter-cleanup.onrender.com
+  /// While it still says YOUR-SERVICE the app writes directly (old behaviour).
+  static const String adminServerUrl = 'https://YOUR-SERVICE.onrender.com';
+
+  Future<String> _getAdminJwt() async {
+    final at = _adminJwtAt;
+    if (_adminJwt != null && at != null && DateTime.now().difference(at).inMinutes < 12) return _adminJwt!;
+    final jwt = await account.createJWT();
+    _adminJwt = jwt.jwt;
+    _adminJwtAt = DateTime.now();
+    return _adminJwt!;
+  }
+
+  /// Forget the token when someone logs in / out (it belongs to one person).
+  void _resetAdminJwt() {
+    _adminJwt = null;
+    _adminJwtAt = null;
+  }
+
+  Future<Map<String, dynamic>> _admin(
+    String action,
+    Map<String, dynamic> payload, {
+    required Future<Map<String, dynamic>> Function() direct,
+  }) async {
+    if (adminServerUrl.contains('YOUR-SERVICE')) return direct();
+    final jwt = await _getAdminJwt();
+    final res = await http
+        .post(
+          Uri.parse('$adminServerUrl/admin'),
+          headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $jwt'},
+          body: jsonEncode({'action': action, ...payload}),
+        )
+        .timeout(const Duration(seconds: 75)); // a sleeping free Render service needs up to ~1 min to wake
+    Map<String, dynamic> out = {};
+    try {
+      out = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+    } catch (_) {}
+    if (res.statusCode >= 400 || out['ok'] == false) {
+      throw Exception((out['error'] ?? 'Server error (${res.statusCode})').toString());
+    }
+    return out;
+  }
+
+  models.Document _docOf(Map<String, dynamic> out) => models.Document.fromMap(Map<String, dynamic>.from(out['doc'] as Map));
+
+  Future<models.Document> createGroup({
+    required String name,
+    required String description,
+    required List<String> memberIds,
+    required String creatorId,
+    bool isPublic = true,
+  }) async {
+    final out = await _admin(
+      'group.create',
+      {'name': name, 'description': description, 'memberIds': memberIds, 'isPublic': isPublic},
+      direct: () async {
+        final d = await _createGroupDirect(name: name, description: description, memberIds: memberIds, creatorId: creatorId, isPublic: isPublic);
+        return {'ok': true, 'doc': d.toMap()};
+      },
+    );
+    return _docOf(out);
+  }
+
+  Future<void> joinGroup({required String groupId, required String userId}) async {
+    await joinOrRequestGroup(groupId: groupId, userId: userId);
+  }
+
+  /// 'joined' or 'requested' (when the group needs an admin's approval).
+  Future<String> joinOrRequestGroup({required String groupId, required String userId}) async {
+    final out = await _admin(
+      'group.join',
+      {'groupId': groupId},
+      direct: () async => {'ok': true, 'status': await _joinOrRequestGroupDirect(groupId: groupId, userId: userId)},
+    );
+    return (out['status'] ?? 'joined').toString();
+  }
+
+  Future<void> leaveGroup({required String groupId, required String userId}) async {
+    await _admin('group.leave', {'groupId': groupId}, direct: () async {
+      await _leaveGroupDirect(groupId: groupId, userId: userId);
+      return {'ok': true};
+    });
+  }
+
+  Future<void> pinMessage({required String groupId, required String messageId}) async {
+    await updateGroup(groupId, {'pinnedMessageId': messageId});
+  }
+
+  Future<void> unpinMessage(String groupId) async {
+    await updateGroup(groupId, {'pinnedMessageId': ''});
+  }
+
+  Future<models.Document> updateGroup(String groupId, Map<String, dynamic> data) async {
+    final out = await _admin('group.update', {'groupId': groupId, 'data': data}, direct: () async {
+      final d = await _updateGroupDirect(groupId, data);
+      return {'ok': true, 'doc': d.toMap()};
+    });
+    return _docOf(out);
+  }
+
+  Future<void> addGroupMembers(String groupId, List<String> userIds) async {
+    await _admin('group.addMembers', {'groupId': groupId, 'userIds': userIds}, direct: () async {
+      await _addGroupMembersDirect(groupId, userIds);
+      return {'ok': true};
+    });
+  }
+
+  Future<void> removeGroupMember(String groupId, String userId) async {
+    await _admin('group.removeMember', {'groupId': groupId, 'userId': userId}, direct: () async {
+      await _removeGroupMemberDirect(groupId, userId);
+      return {'ok': true};
+    });
+  }
+
+  Future<void> setGroupAdmins(String groupId, List<String> adminIds) async {
+    await _admin('group.setAdmins', {'groupId': groupId, 'adminIds': adminIds}, direct: () async {
+      await _setGroupAdminsDirect(groupId, adminIds);
+      return {'ok': true};
+    });
+  }
+
+  Future<void> resolveJoinRequest({required String groupId, required String userId, required bool approve}) async {
+    await _admin('group.resolveRequest', {'groupId': groupId, 'userId': userId, 'approve': approve}, direct: () async {
+      await _resolveJoinRequestDirect(groupId: groupId, userId: userId, approve: approve);
+      return {'ok': true};
+    });
+  }
+
+  Future<void> deleteGroup(String groupId) async {
+    await _admin('group.delete', {'groupId': groupId}, direct: () async {
+      await _deleteGroupDirect(groupId);
+      return {'ok': true};
+    });
+  }
+
+  Future<models.Document> createChannel({
+    required String name,
+    required String description,
+    required String creatorId,
+    String avatarUrl = '',
+  }) async {
+    final out = await _admin(
+      'channel.create',
+      {'name': name, 'description': description, 'avatarUrl': avatarUrl},
+      direct: () async {
+        final d = await _createChannelDirect(name: name, description: description, creatorId: creatorId, avatarUrl: avatarUrl);
+        return {'ok': true, 'doc': d.toMap()};
+      },
+    );
+    return _docOf(out);
+  }
+
+  Future<void> subscribeChannel({required String channelId, required String userId}) async {
+    await _admin('channel.subscribe', {'channelId': channelId}, direct: () async {
+      await _subscribeChannelDirect(channelId: channelId, userId: userId);
+      return {'ok': true};
+    });
+  }
+
+  /// Unfollow yourself, or (admins) remove a follower.
+  Future<void> unsubscribeChannel({required String channelId, required String userId}) async {
+    await _admin('channel.unsubscribe', {'channelId': channelId, 'userId': userId}, direct: () async {
+      await _unsubscribeChannelDirect(channelId: channelId, userId: userId);
+      return {'ok': true};
+    });
+  }
+
+  Future<models.Document> updateChannel(String channelId, Map<String, dynamic> data) async {
+    final out = await _admin('channel.update', {'channelId': channelId, 'data': data}, direct: () async {
+      final d = await _updateChannelDirect(channelId, data);
+      return {'ok': true, 'doc': d.toMap()};
+    });
+    return _docOf(out);
+  }
+
+  Future<void> setChannelAdmins(String channelId, List<String> adminIds) async {
+    await _admin('channel.setAdmins', {'channelId': channelId, 'adminIds': adminIds}, direct: () async {
+      await _setChannelAdminsDirect(channelId, adminIds);
+      return {'ok': true};
+    });
+  }
+
+  Future<void> pinChannelPost(String channelId, String messageId) async {
+    await updateChannel(channelId, {'pinnedMessageId': messageId});
+  }
+
+  Future<void> deleteChannel(String channelId) async {
+    await _admin('channel.delete', {'channelId': channelId}, direct: () async {
+      await _deleteChannelDirect(channelId);
+      return {'ok': true};
+    });
+  }
+
+  // ---------------- SHARED HELPERS ----------------
+  /// If an Appwrite error says "Unknown attribute: x", returns "x" — so the UI
+  /// can tell the developer exactly which attribute to add in the console.
+  static String? missingAttribute(Object e) {
+    final msg = e is AppwriteException ? (e.message ?? '') : e.toString();
+    final m = RegExp(r'Unknown attribute: "([^"]+)"').firstMatch(msg);
+    return m?.group(1);
+  }
+
+  /// Short text for the newest-post / newest-message preview.
+  static String previewFor(String type, String text) {
+    switch (type) {
+      case 'image':
+        return text.isNotEmpty ? '📷 $text' : '📷 Photo';
+      case 'video':
+        return text.isNotEmpty ? '🎥 $text' : '🎥 Video';
+      case 'voice':
+        return '🎤 Voice message';
+      case 'file':
+        return '📎 ${text.split('\n').first}';
+      default:
+        return text;
+    }
+  }
+
+  /// Several users at once (member / follower lists).
+  Future<List<models.Document>> getUsersByIds(List<String> ids) async {
+    final out = <models.Document>[];
+    for (var i = 0; i < ids.length; i += 50) {
+      final chunk = ids.sublist(i, i + 50 > ids.length ? ids.length : i + 50);
+      try {
+        final res = await databases.listDocuments(
+          databaseId: AppwriteConfig.databaseId,
+          collectionId: AppwriteConfig.usersCollection,
+          queries: [Query.equal('\$id', chunk), Query.limit(50)],
+        );
+        out.addAll(res.documents);
+      } catch (_) {}
+    }
+    return out;
+  }
+
+  // ---------------- CHANNEL ADMIN ----------------
+  Future<models.Document> _updateChannelDirect(String channelId, Map<String, dynamic> data) {
+    return databases.updateDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.channelsCollection,
+      documentId: channelId,
+      data: data,
+    );
+  }
+
+  Future<void> _setChannelAdminsDirect(String channelId, List<String> adminIds) async {
+    await _updateChannelDirect(channelId, {'adminIds': adminIds});
+  }
+
+  /// Keeps the channel list preview ("last post + time") up to date.
+  /// Silent if the channels collection has no lastMessage / lastMessageAt yet.
+  Future<void> touchChannelLastPost(String channelId, String preview) async {
+    try {
+      await _updateChannelDirect(channelId, {
+        'lastMessage': preview,
+        'lastMessageAt': DateTime.now().toUtc().toIso8601String(),
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _pinChannelPostDirect(String channelId, String messageId) async {
+    await _updateChannelDirect(channelId, {'pinnedMessageId': messageId});
+  }
+
+  /// Deletes the channel and (best effort) all its posts.
+  Future<void> _deleteChannelDirect(String channelId) async {
+    await databases.deleteDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.channelsCollection,
+      documentId: channelId,
+    );
+    await _deleteAllMessages(channelId);
+  }
+
+  Future<void> _deleteAllMessages(String chatId) async {
+    try {
+      for (var round = 0; round < 10; round++) {
+        final res = await databases.listDocuments(
+          databaseId: AppwriteConfig.databaseId,
+          collectionId: AppwriteConfig.messagesCollection,
+          queries: [Query.equal('chatId', chatId), Query.limit(100)],
+        );
+        if (res.documents.isEmpty) break;
+        for (final d in res.documents) {
+          try {
+            await databases.deleteDocument(
+              databaseId: AppwriteConfig.databaseId,
+              collectionId: AppwriteConfig.messagesCollection,
+              documentId: d.$id,
+            );
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+
+  // ---------------- GROUP ADMIN ----------------
+  Future<models.Document> _updateGroupDirect(String groupId, Map<String, dynamic> data) {
+    return databases.updateDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.groupsCollection,
+      documentId: groupId,
+      data: data,
+    );
+  }
+
+  Future<models.Document> _rawGroup(String groupId) => databases.getDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.groupsCollection,
+        documentId: groupId,
+      );
+
+  Future<void> _addGroupMembersDirect(String groupId, List<String> userIds) async {
+    final doc = await _rawGroup(groupId);
+    final members = List<String>.from(doc.data['memberIds'] ?? []);
+    for (final id in userIds) {
+      if (!members.contains(id)) members.add(id);
+    }
+    await _updateGroupDirect(groupId, {'memberIds': members});
+  }
+
+  /// Removes a person from the group (also from admins / waiting list).
+  Future<void> _removeGroupMemberDirect(String groupId, String userId) async {
+    final doc = await _rawGroup(groupId);
+    final members = List<String>.from(doc.data['memberIds'] ?? [])..remove(userId);
+    final admins = List<String>.from(doc.data['adminIds'] ?? [])..remove(userId);
+    await _updateGroupDirect(groupId, {'memberIds': members, 'adminIds': admins});
+  }
+
+  Future<void> _setGroupAdminsDirect(String groupId, List<String> adminIds) async {
+    await _updateGroupDirect(groupId, {'adminIds': adminIds});
+  }
+
+  /// Joins right away, or — if the group needs admin approval — sends a
+  /// request. Returns 'joined' or 'requested'.
+  Future<String> _joinOrRequestGroupDirect({required String groupId, required String userId}) async {
+    final doc = await _rawGroup(groupId);
+    final needApproval = doc.data['needApproval'] == true;
+    final admins = List<String>.from(doc.data['adminIds'] ?? []);
+    if (needApproval && !admins.contains(userId)) {
+      final pending = List<String>.from(doc.data['pendingIds'] ?? []);
+      if (!pending.contains(userId)) pending.add(userId);
+      await _updateGroupDirect(groupId, {'pendingIds': pending});
+      return 'requested';
+    }
+    await _joinGroupDirect(groupId: groupId, userId: userId);
+    return 'joined';
+  }
+
+  Future<void> _resolveJoinRequestDirect({required String groupId, required String userId, required bool approve}) async {
+    final doc = await _rawGroup(groupId);
+    final pending = List<String>.from(doc.data['pendingIds'] ?? [])..remove(userId);
+    final members = List<String>.from(doc.data['memberIds'] ?? []);
+    if (approve && !members.contains(userId)) members.add(userId);
+    await _updateGroupDirect(groupId, {'pendingIds': pending, 'memberIds': members});
+  }
+
+  Future<void> _deleteGroupDirect(String groupId) async {
+    await databases.deleteDocument(
+      databaseId: AppwriteConfig.databaseId,
+      collectionId: AppwriteConfig.groupsCollection,
+      documentId: groupId,
+    );
+    await _deleteAllMessages(groupId);
   }
 
   // ---------------- ADS ----------------
