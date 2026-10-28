@@ -918,9 +918,9 @@ class AppwriteService {
   // writing directly so nothing breaks while you set it up.
   // ======================================================================
   /// Public address of your Render service (no trailing slash), e.g.
-  /// https://texter-cleanup.onrender.com
+  /// https://threedayexpireserver.onrender.com
   /// While it still says YOUR-SERVICE the app writes directly (old behaviour).
-  static const String adminServerUrl = 'https://YOUR-SERVICE.onrender.com';
+  static const String adminServerUrl = 'https://threedayexpireserver.onrender.com';
 
   Future<String> _getAdminJwt() async {
     final at = _adminJwtAt;
