@@ -8,6 +8,7 @@ import '../services/appwrite_service.dart';
 import '../services/theme_notifier.dart';
 import '../services/local_db_service.dart';
 import '../services/chat_state_service.dart';
+import '../widgets/texter_ui.dart';
 import 'one_to_one_chat_screen.dart';
 import 'new_chat_screen.dart';
 import 'privacy_screen.dart';
@@ -44,6 +45,8 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
   final Set<String> _archivedIds = {};
   final Map<String, String> _deletedSnap = {};
   bool _viewArchived = false;
+  List<String> _pinnedIds = [];
+  int _filter = 0; // 0 = all, 1 = unread only
   bool get _isSelectionMode => _selectedChatIds.isNotEmpty;
 
   // Day/Night mode animation state
@@ -163,8 +166,7 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
   String _formatTime(models.Document c) {
     final raw = c.$updatedAt;
     try {
-      final dt = DateTime.parse(raw).toLocal();
-      return DateFormat('HH:mm').format(dt);
+      return shortTime(DateTime.parse(raw));
     } catch (_) {
       return '';
     }
@@ -184,8 +186,10 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
     if (_myId == null) return;
     final a = await ChatStateService.instance.archived(_myId!);
     final d = await ChatStateService.instance.deleted(_myId!);
+    final pins = await ChatStateService.instance.pinned(_myId!);
     if (!mounted) return;
     setState(() {
+      _pinnedIds = pins;
       _archivedIds
         ..clear()
         ..addAll(a);
@@ -203,8 +207,46 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
     return !unread && (c.data['lastMessage'] ?? '').toString() == snap;
   }
 
-  List<models.Document> get _mainChats =>
-      _chats.where((c) => !_archivedIds.contains(c.$id) && !_isHiddenByDelete(c)).toList();
+  List<models.Document> get _mainChats {
+    final visible = _chats.where((c) => !_archivedIds.contains(c.$id) && !_isHiddenByDelete(c)).toList();
+    final pinned = <models.Document>[];
+    for (final id in _pinnedIds) {
+      final i = visible.indexWhere((c) => c.$id == id);
+      if (i >= 0) pinned.add(visible.removeAt(i));
+    }
+    return [...pinned, ...visible];
+  }
+
+  bool _hasUnread(models.Document c) =>
+      _myId != null && (c.data['unreadFor'] as String? ?? '').split(',').contains(_myId);
+
+  Future<void> _pinSelected() async {
+    if (_myId == null || _selectedChatIds.isEmpty) return;
+    final ids = _selectedChatIds.toList();
+    final allPinned = ids.every(_pinnedIds.contains);
+    if (!allPinned) {
+      final fresh = ids.where((i) => !_pinnedIds.contains(i)).length;
+      if (_pinnedIds.length + fresh > 5) {
+        _snack('You can pin up to 5 chats');
+        return;
+      }
+    }
+    for (final id in ids) {
+      await ChatStateService.instance.setPinned(_myId!, id, !allPinned);
+    }
+    if (!mounted) return;
+    setState(() {
+      if (allPinned) {
+        _pinnedIds.removeWhere(ids.contains);
+      } else {
+        for (final id in ids) {
+          if (!_pinnedIds.contains(id)) _pinnedIds.add(id);
+        }
+      }
+      _selectedChatIds.clear();
+    });
+    _snack(allPinned ? 'Unpinned' : 'Pinned to top');
+  }
 
   List<models.Document> get _archivedChats =>
       _chats.where((c) => _archivedIds.contains(c.$id) && !_isHiddenByDelete(c)).toList();
@@ -299,6 +341,159 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
     }
   }
 
+  Widget _filterChip(String label, int count, int idx, UiPalette u) {
+    final sel = _filter == idx;
+    return GestureDetector(
+      onTap: () => setState(() => _filter = idx),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: sel ? u.accent : u.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: sel ? u.accent : u.border),
+        ),
+        child: Text(
+          count > 0 ? '$label · $count' : label,
+          style: AppTheme.body(
+            size: 13,
+            weight: FontWeight.w700,
+            color: sel ? (Theme.of(context).brightness == Brightness.dark ? Colors.black : Colors.white) : u.subtext,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// One chat row: photo (gradient ring when there is something new), name,
+  /// last message, time, pin and a gradient "new" pill.
+  Widget _chatTile({
+    required models.Document c,
+    required String name,
+    required String avatarUrl,
+    required bool selected,
+    required bool pinned,
+    required bool unread,
+    required bool online,
+    required UiPalette u,
+  }) {
+    final shownName = name.isEmpty ? 'Chat' : name;
+    var last = (c.data['lastMessage'] ?? '').toString().trim().replaceAll('\n', ' ');
+    if (last.isEmpty) last = c.$updatedAt != c.$createdAt ? '📎 Attachment' : 'Say hi 👋';
+    final t = DateTime.tryParse(c.$updatedAt);
+    return GestureDetector(
+      onTap: () {
+        if (_isSelectionMode) {
+          _toggleSelect(c.$id);
+        } else {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => OneToOneChatScreen(chatId: c.$id, chatName: shownName)));
+        }
+      },
+      onLongPress: () => _toggleSelect(c.$id),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: selected ? u.accent.withOpacity(0.12) : u.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? u.accent : (unread ? u.accent.withOpacity(0.55) : u.border),
+            width: (selected || unread) ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Stack(
+              children: [
+                TexterAvatar(name: shownName, url: avatarUrl, size: 54, ring: unread),
+                if (online)
+                  Positioned(
+                    right: 1,
+                    bottom: 1,
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(color: const Color(0xFF2ECC71), shape: BoxShape.circle, border: Border.all(color: u.card, width: 2.5)),
+                    ),
+                  ),
+                if (selected)
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(color: u.accent, shape: BoxShape.circle, border: Border.all(color: u.card, width: 2)),
+                      child: const Icon(Icons.check, size: 13, color: Colors.white),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    shownName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.body(size: 16, weight: unread ? FontWeight.w800 : FontWeight.w600, color: u.text),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    last,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.body(
+                      size: 13.5,
+                      weight: unread ? FontWeight.w600 : FontWeight.w400,
+                      color: unread ? u.text.withOpacity(0.85) : u.subtext,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  t == null ? '' : shortTime(t),
+                  style: AppTheme.body(size: 11.5, weight: unread ? FontWeight.w700 : FontWeight.w400, color: unread ? u.accent : u.subtext),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (pinned)
+                      Padding(
+                        padding: EdgeInsets.only(right: unread ? 6 : 0),
+                        child: Transform.rotate(angle: 0.785398, child: Icon(Icons.push_pin_rounded, size: 16, color: u.subtext)),
+                      ),
+                    if (unread)
+                      Container(
+                        constraints: const BoxConstraints(minWidth: 22),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(11),
+                          gradient: const LinearGradient(colors: kTexterGradient),
+                        ),
+                        child: const Text('1', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800)),
+                      )
+                    else if (!pinned)
+                      const SizedBox(height: 18),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _toggleDayNightMode() async {
     await ThemeNotifier.toggle();
     setState(() {
@@ -343,7 +538,9 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
     final u = UiPalette.of(context);
     final archivedCount = _archivedChats.length;
     final baseList = _viewArchived ? _archivedChats : _mainChats;
+    final unreadCount0 = _mainChats.where(_hasUnread).length;
     final filtered = baseList.where((c) {
+      if (_filter == 1 && !_viewArchived && !_hasUnread(c)) return false;
       final name = (c.data['chatName'] ?? '').toString().toLowerCase();
       return name.contains(_query.toLowerCase());
     }).toList();
@@ -370,6 +567,12 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
               ),
               title: Text('${_selectedChatIds.length}', style: AppTheme.heading(size: 18, color: u.text)),
               actions: [
+                if (!_viewArchived)
+                  IconButton(
+                    tooltip: _selectedChatIds.every(_pinnedIds.contains) ? 'Unpin' : 'Pin to top',
+                    icon: Icon(_selectedChatIds.every(_pinnedIds.contains) ? Icons.push_pin : Icons.push_pin_outlined),
+                    onPressed: _pinSelected,
+                  ),
                 IconButton(
                   tooltip: _viewArchived ? 'Unarchive' : 'Archive',
                   icon: Icon(_viewArchived ? Icons.unarchive_outlined : Icons.archive_outlined),
@@ -503,6 +706,17 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                 ),
               ),
             ),
+            if (!_viewArchived)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Row(
+                  children: [
+                    _filterChip('All', _mainChats.length, 0, u),
+                    const SizedBox(width: 8),
+                    _filterChip('Unread', unreadCount0, 1, u),
+                  ],
+                ),
+              ),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator(color: AppTheme.cyan))
@@ -547,10 +761,9 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                             final avatarUrl = _avatarCache[c.$id] ?? '';
                             final isSelected = _selectedChatIds.contains(c.$id);
 
-                            final bool isPinned = c.data['isPinned'] ?? false;
+                            final bool isPinned = _pinnedIds.contains(c.$id);
                             final unreadForList = (c.data['unreadFor'] as String? ?? '').split(',').where((e) => e.isNotEmpty).toList();
                             final bool hasUnread = _myId != null && unreadForList.contains(_myId);
-                            final int unreadCount = hasUnread ? 1 : 0;
                             final bool isOnline = _onlineCache[c.$id] == true;
 
                             return Dismissible(
@@ -601,136 +814,15 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                                   ],
                                 ),
                               ),
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 10),
-                                decoration: BoxDecoration(
-                                  color: isSelected ? u.cardAlt.withOpacity(0.7) : u.card,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: u.border),
-                                ),
-                                child: ListTile(
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                  leading: Stack(
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 22,
-                                        backgroundColor: u.cardAlt,
-                                        backgroundImage: avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl) : null,
-                                        // Avatar file storage se delete/404 ho to bhi crash na ho,
-                                        // silently ignore karke initial-letter fallback dikhta rahe.
-                                        onBackgroundImageError: avatarUrl.isNotEmpty ? (_, __) {} : null,
-                                        child: avatarUrl.isEmpty
-                                            ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: AppTheme.heading(size: 15, color: u.subtext))
-                                            : null,
-                                      ),
-                                      if (isOnline)
-                                        Positioned(
-                                          top: 0,
-                                          right: 0,
-                                          child: Container(
-                                            width: 12,
-                                            height: 12,
-                                            decoration: BoxDecoration(
-                                              color: Colors.greenAccent,
-                                              shape: BoxShape.circle,
-                                              border: Border.all(color: u.card, width: 2),
-                                            ),
-                                          ),
-                                        ),
-                                      if (unreadCount > 0 && !isSelected)
-                                        Positioned(
-                                          bottom: 0,
-                                          right: 0,
-                                          child: Container(
-                                            width: 13,
-                                            height: 13,
-                                            decoration: BoxDecoration(
-                                              color: AppTheme.cyan,
-                                              shape: BoxShape.circle,
-                                              border: Border.all(color: u.card, width: 2),
-                                            ),
-                                          ),
-                                        ),
-                                      if (isSelected)
-                                        Positioned(
-                                          bottom: 0,
-                                          right: 0,
-                                          child: Container(
-                                            decoration: const BoxDecoration(
-                                              color: AppTheme.cyan,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            padding: const EdgeInsets.all(2),
-                                            child: const Icon(Icons.check, size: 14, color: Colors.black),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                  title: Text(
-                                    name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTheme.body(size: 15, weight: FontWeight.w600, color: u.text),
-                                  ),
-                                  subtitle: Text(
-                                    c.data['lastMessage'] ?? '',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTheme.body(size: 12.5, color: AppTheme.textSecondary),
-                                  ),
-                                  trailing: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          if (isPinned)
-                                            const Padding(
-                                              padding: EdgeInsets.only(right: 4),
-                                              child: Icon(Icons.push_pin, size: 12, color: AppTheme.textSecondary),
-                                            ),
-                                          Text(_formatTime(c), style: AppTheme.body(size: 11, color: AppTheme.textSecondary)),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      if (unreadCount > 0)
-                                        Container(
-                                          padding: const EdgeInsets.all(6),
-                                          decoration: const BoxDecoration(
-                                            color: AppTheme.cyan,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          constraints: const BoxConstraints(
-                                            minWidth: 20,
-                                            minHeight: 20,
-                                          ),
-                                          child: Center(
-                                            child: Text(
-                                              unreadCount > 99 ? '99+' : '$unreadCount',
-                                              style: const TextStyle(
-                                                color: Colors.black,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                  onTap: () {
-                                    if (_isSelectionMode) {
-                                      _toggleSelect(c.$id);
-                                    } else {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(builder: (_) => OneToOneChatScreen(chatId: c.$id, chatName: name)),
-                                      );
-                                    }
-                                  },
-                                  onLongPress: () => _toggleSelect(c.$id),
-                                ),
+                              child: _chatTile(
+                                c: c,
+                                name: name.toString(),
+                                avatarUrl: avatarUrl,
+                                selected: isSelected,
+                                pinned: isPinned,
+                                unread: hasUnread,
+                                online: isOnline,
+                                u: u,
                               ),
                             );
                           },
