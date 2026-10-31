@@ -54,6 +54,18 @@ class __CLASS__ : FlutterPlugin, MethodCallHandler {
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
+        if (call.method == "dismissFcm") {
+            val c = context
+            if (c != null) {
+                // Firebase itself posts a plain notification when a push carries a "notification" block.
+                // We show our own, so remove Firebase's copy (it can appear a moment later — try a few times).
+                for (delayMs in longArrayOf(0L, 400L, 1200L, 3000L)) {
+                    handler.postDelayed({ cancelFcmNotifications(c) }, delayMs)
+                }
+            }
+            result.success(true)
+            return
+        }
         if (call.method == "isSupported") {
             result.success(Build.VERSION.SDK_INT >= 30)
             return
@@ -77,6 +89,17 @@ class __CLASS__ : FlutterPlugin, MethodCallHandler {
         val avatarPath = call.argument<String>("avatarPath")
         attach(ctx.applicationContext, id, chatId, kind, chatName, senderName, body, messages, avatarPath, 0)
         result.success(true)
+    }
+
+    private fun cancelFcmNotifications(ctx: Context) {
+        try {
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            for (sbn in nm.activeNotifications) {
+                val tag = sbn.tag
+                if (tag != null && tag.startsWith("FCM-Notification")) nm.cancel(tag, sbn.id)
+            }
+        } catch (t: Throwable) {
+        }
     }
 
     @TargetApi(30)

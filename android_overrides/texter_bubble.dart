@@ -14,6 +14,13 @@ class TexterBubble {
     }
   }
 
+  /// Removes the extra notification Firebase shows by itself (duplicate of ours).
+  static Future<void> dismissFcm() async {
+    try {
+      await _channel.invokeMethod('dismissFcm');
+    } catch (_) {}
+  }
+
   static Future<bool> attach({
     required int id,
     required String chatId,
