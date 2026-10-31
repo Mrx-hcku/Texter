@@ -510,12 +510,14 @@ class AppwriteService {
         collectionId: AppwriteConfig.chatsCollection,
         documentId: chatId,
         data: {
-          'lastMessage': text.isNotEmpty ? text : 'Attachment',
+          'lastMessage': previewFor(attachmentType, text).isNotEmpty ? previewFor(attachmentType, text) : 'Attachment',
           'unreadFor': recipients.join(','),
         },
       );
     } catch (_) {}
-    _notifyPush(chatId: chatId, senderId: senderId, text: text, type: attachmentType.isNotEmpty ? attachmentType : 'text');
+    // Photos / videos have no text — send a readable preview so the push is never blank.
+    final pushText = previewFor(attachmentType, text);
+    _notifyPush(chatId: chatId, senderId: senderId, text: pushText.isNotEmpty ? pushText : text, type: attachmentType.isNotEmpty ? attachmentType : 'text');
     return doc;
   }
 

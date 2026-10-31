@@ -30,6 +30,25 @@ class ChatStateService {
     await prefs.setStringList(_archKey(userId), set.toList());
   }
 
+  // ---------- pinned chats (stay on top of the list) ----------
+  String _pinKey(String userId) => 'pinned_chats_$userId';
+
+  /// Pinned chat ids in the order they were pinned.
+  Future<List<String>> pinned(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    return List<String>.from(prefs.getStringList(_pinKey(userId)) ?? <String>[]);
+  }
+
+  Future<void> setPinned(String userId, String chatId, bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    final list = List<String>.from(prefs.getStringList(_pinKey(userId)) ?? <String>[]);
+    list.remove(chatId);
+    if (value) list.add(chatId);
+    await prefs.setStringList(_pinKey(userId), list);
+  }
+
   // ---------- delete for me ----------
   Map<String, dynamic> _readDeleted(SharedPreferences prefs, String userId) {
     try {
