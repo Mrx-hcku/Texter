@@ -63,18 +63,33 @@ void _openChatFromNotificationData(Map<String, dynamic> data) {
 /// Multiple messages from the same chat share one `groupKey` (the chatId),
 /// so Android stacks them into one expandable notification — WhatsApp/
 /// Telegram style — instead of showing a separate one for each.
-Future<void> _showChatNotification(Map<String, dynamic> data) async {
+Future<void> _showChatNotification(Map<String, dynamic> data, {RemoteNotification? system}) async {
   final chatId = data['chatId'] as String? ?? '';
   final kind = data['kind'] as String? ?? 'direct';
   final senderId = data['senderId'] as String? ?? '';
   final senderName = data['senderName'] as String? ?? '';
-  final title = data['title'] as String? ?? senderName;
-  final body = data['body'] as String? ?? '';
-  final chatName = data['chatName'] as String? ?? title;
+  var title = (data['title'] as String?)?.trim() ?? '';
+  if (title.isEmpty) title = senderName.trim();
+  if (title.isEmpty) title = (system?.title ?? '').trim();
+  var body = (data['body'] as String?)?.trim() ?? '';
+  if (body.isEmpty) body = ((data['text'] as String?) ?? '').trim();
+  if (body.isEmpty) body = (system?.body ?? '').trim();
+  if (body.isEmpty) body = AppwriteService.previewFor((data['type'] as String?) ?? '', ''); // photo / video / file
   if (chatId.isEmpty) return;
+  if (title.isEmpty && body.isEmpty) return; // nothing to show — never post a blank notification
+  if (title.isEmpty) title = 'New message';
+  if (body.isEmpty) body = 'New message';
+  final chatName = (data['chatName'] as String?)?.trim().isNotEmpty == true ? data['chatName'] as String : title;
 
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
+
+  // The same push can reach us twice (two registered devices / two isolates): show it once.
+  final sig = '$chatId|$title|$body';
+  final nowMs = DateTime.now().millisecondsSinceEpoch;
+  if (prefs.getString('last_push_sig') == sig && nowMs - (prefs.getInt('last_push_at') ?? 0) < 4000) return;
+  await prefs.setString('last_push_sig', sig);
+  await prefs.setInt('last_push_at', nowMs);
   final countKey = 'unread_count_$chatId';
   final newCount = (prefs.getInt(countKey) ?? 0) + 1;
   await prefs.setInt(countKey, newCount);
@@ -153,6 +168,7 @@ Future<void> _showChatNotification(Map<String, dynamic> data) async {
       NotificationDetails(android: summaryDetails),
       payload: payload,
     );
+    TexterBubble.dismissFcm();
     return;
   }
 
@@ -168,6 +184,7 @@ Future<void> _showChatNotification(Map<String, dynamic> data) async {
     avatarPath: prefs.getString('avatar_path_$chatId'),
   );
   await _refreshSummary(prefs);
+  TexterBubble.dismissFcm();
 }
 
 const String _messagesGroupKey = 'texter_messages';
@@ -326,7 +343,7 @@ void _handleNotificationResponse(NotificationResponse response) {
 /// show the notification ourselves here (title/body/grouping/actions).
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await _showChatNotification(message.data);
+  await _showChatNotification(message.data, system: message.notification);
 }
 
 /// Errors that are harmless background noise (third-party SDK quirks and
@@ -390,7 +407,7 @@ void main() async {
       // in the foreground either — show them ourselves here too.
       if (!ChatBubble.isBubbleEngine) {
         FirebaseMessaging.onMessage.listen((message) {
-          _showChatNotification(message.data);
+          _showChatNotification(message.data, system: message.notification);
         });
       }
 
